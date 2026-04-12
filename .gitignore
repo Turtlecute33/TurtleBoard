@@ -15,3 +15,15 @@ tools/*.txt
 *.patch
 *.diff
 *.sh
+
+# Signing keys — never commit
+release-signing/
+*.jks
+*.keystore
+keystore.properties
+
+# Internal dev docs
+docs/superpowers/
+
+# Claude config
+CLAUDE.md
