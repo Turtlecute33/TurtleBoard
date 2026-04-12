@@ -2,9 +2,14 @@ name: Build signed release APK
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -53,12 +58,26 @@ jobs:
           name: TurtleBoard-release
           path: app/build/outputs/apk/release/*.apk
 
-      - name: Create GitHub Release
+      - name: Create GitHub Release for tag
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: app/build/outputs/apk/release/*.apk
           generate_release_notes: true
+
+      - name: Create rolling GitHub Release for main
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-main
+          target_commitish: ${{ github.sha }}
+          name: Latest main build
+          prerelease: true
+          files: app/build/outputs/apk/release/*.apk
+          body: |
+            Automated signed APK built from `main`.
+
+            Commit: ${{ github.sha }}
 
       - name: Clean up keystore
         if: always()
