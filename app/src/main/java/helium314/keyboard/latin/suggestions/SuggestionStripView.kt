@@ -59,6 +59,7 @@ import helium314.keyboard.latin.utils.prefs
 import helium314.keyboard.latin.utils.removeFirst
 import helium314.keyboard.latin.utils.removePinnedKey
 import helium314.keyboard.latin.utils.setToolbarButtonsActivatedStateOnPrefChange
+import helium314.keyboard.latin.voice.RecordingOverlayView
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 import kotlin.math.min
@@ -277,6 +278,27 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         }
 
         if (Settings.getValues().mAutoHideToolbar) setToolbarVisibility(false)
+    }
+
+    private var recordingOverlay: RecordingOverlayView? = null
+
+    fun showRecordingOverlay() {
+        val overlay = RecordingOverlayView(context)
+        overlay.setColors(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
+        overlay.showRecording()
+        setExternalSuggestionView(overlay, false)
+        recordingOverlay = overlay
+    }
+
+    fun showTranscribingOverlay() {
+        recordingOverlay?.showTranscribing()
+    }
+
+    fun hideRecordingOverlay() {
+        recordingOverlay?.stopAnimation()
+        recordingOverlay = null
+        clear()
+        isExternalSuggestionVisible = false
     }
 
     fun setMoreSuggestionsHeight(remainingHeight: Int) {

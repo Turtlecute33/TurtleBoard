@@ -83,6 +83,7 @@ import helium314.keyboard.latin.utils.SubtypeLocaleUtils;
 import helium314.keyboard.latin.utils.SubtypeSettings;
 import helium314.keyboard.latin.utils.SubtypeState;
 import helium314.keyboard.latin.utils.ToolbarMode;
+import helium314.keyboard.latin.voice.VoiceInputManager;
 import helium314.keyboard.settings.SettingsActivity2;
 import kotlin.Unit;
 
@@ -135,6 +136,7 @@ public class LatinIME extends InputMethodService implements
     private View mInputView;
     private InsetsOutlineProvider mInsetsUpdater;
     private SuggestionStripView mSuggestionStripView;
+    private VoiceInputManager mVoiceInputManager;
 
     private RichInputMethodManager mRichImm;
     final KeyboardSwitcher mKeyboardSwitcher;
@@ -572,6 +574,38 @@ public class LatinIME extends InputMethodService implements
         registerReceiver(mRestartAfterDeviceUnlockReceiver, restartAfterUnlockFilter);
 
         StatsUtils.onCreate(mSettings.getCurrent(), mRichImm);
+
+        mVoiceInputManager = new VoiceInputManager(this, new VoiceInputManager.Callbacks() {
+            @Override
+            public void onRecordingStarted() {
+                if (mSuggestionStripView != null) mSuggestionStripView.showRecordingOverlay();
+            }
+
+            @Override
+            public void onTranscribing() {
+                if (mSuggestionStripView != null) mSuggestionStripView.showTranscribingOverlay();
+            }
+
+            @Override
+            public void onFinished() {
+                if (mSuggestionStripView != null) mSuggestionStripView.hideRecordingOverlay();
+            }
+
+            @Override
+            public void onTranscriptionResult(@NonNull final String text) {
+                mInputLogic.mConnection.commitText(text, 1);
+            }
+
+            @Override
+            public void onError(@NonNull final String message) {
+                // Toast is already shown by VoiceInputManager
+            }
+
+            @Override
+            public void onMaxDurationReached() {
+                AudioAndHapticFeedbackManager.getInstance().vibrate(50L);
+            }
+        });
     }
 
     private void loadSettings() {
@@ -1395,7 +1429,14 @@ public class LatinIME extends InputMethodService implements
     // completely replace #onCodeInput.
     public void onEvent(@NonNull final Event event) {
         if (KeyCode.VOICE_INPUT == event.getKeyCode()) {
-            mRichImm.switchToShortcutIme(this);
+            if (mVoiceInputManager != null) {
+                if (mVoiceInputManager.getState() == VoiceInputManager.State.RECORDING) {
+                    mVoiceInputManager.stopRecording();
+                } else {
+                    mVoiceInputManager.startRecording();
+                }
+            }
+            return;
         }
         final InputTransaction completeInputTransaction =
                 mInputLogic.onCodeInput(mSettings.getCurrent(), event,
@@ -1840,6 +1881,17 @@ public class LatinIME extends InputMethodService implements
                 mKeyboardSwitcher.trimMemory();
             }
             // deallocateMemory always called on hiding, and should not be called when showing
+        }
+    }
+
+    public boolean isVoiceRecording() {
+        return mVoiceInputManager != null
+            && mVoiceInputManager.getState() == VoiceInputManager.State.RECORDING;
+    }
+
+    public void stopVoiceRecording() {
+        if (mVoiceInputManager != null) {
+            mVoiceInputManager.stopRecording();
         }
     }
 }
