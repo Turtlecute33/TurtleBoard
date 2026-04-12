@@ -40,10 +40,15 @@ import helium314.keyboard.settings.SettingsActivity
 import helium314.keyboard.latin.utils.Theme
 import helium314.keyboard.settings.dialogs.ToolbarKeysCustomizer
 import helium314.keyboard.settings.initPreview
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import helium314.keyboard.latin.permissions.PermissionsUtil
 import helium314.keyboard.settings.preferences.ListPreference
 import helium314.keyboard.settings.preferences.Preference
 import helium314.keyboard.settings.preferences.ReorderSwitchPreference
 import helium314.keyboard.settings.preferences.SwitchPreference
+import helium314.keyboard.settings.preferences.TextInputPreference
 import helium314.keyboard.latin.utils.previewDark
 
 @Composable
@@ -71,6 +76,10 @@ fun ToolbarScreen(
         if (toolbarMode == ToolbarMode.EXPANDABLE) Settings.PREF_AUTO_SHOW_TOOLBAR else null,
         if (toolbarMode == ToolbarMode.EXPANDABLE) Settings.PREF_AUTO_HIDE_TOOLBAR else null,
         if (toolbarMode != ToolbarMode.HIDDEN) Settings.PREF_VARIABLE_TOOLBAR_DIRECTION else null,
+        Settings.PREF_VOICE_INPUT_ENABLED,
+        Settings.PREF_OPENROUTER_API_KEY,
+        Settings.PREF_VOICE_MODEL,
+        Settings.PREF_VOICE_MODEL_CUSTOM,
     )
     SearchSettingsScreen(
         onClickBack = onClickBack,
@@ -138,7 +147,33 @@ fun createToolbarSettings(context: Context) = listOf(
         R.string.var_toolbar_direction, R.string.var_toolbar_direction_summary)
     {
         SwitchPreference(it, Defaults.PREF_VARIABLE_TOOLBAR_DIRECTION)
-    }
+    },
+    Setting(context, Settings.PREF_VOICE_INPUT_ENABLED, R.string.voice_input_enabled, R.string.voice_input_enabled_summary) { setting ->
+        val ctx = LocalContext.current
+        val permissionLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { _ -> }
+        SwitchPreference(setting, Defaults.PREF_VOICE_INPUT_ENABLED) { enabled ->
+            if (enabled && !PermissionsUtil.checkAllPermissionsGranted(ctx, Manifest.permission.RECORD_AUDIO)) {
+                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            }
+        }
+    },
+    Setting(context, Settings.PREF_OPENROUTER_API_KEY, R.string.openrouter_api_key, R.string.openrouter_api_key_summary) {
+        TextInputPreference(it, Defaults.PREF_OPENROUTER_API_KEY, isPassword = true)
+    },
+    Setting(context, Settings.PREF_VOICE_MODEL, R.string.voice_model) { setting ->
+        val ctx = LocalContext.current
+        val items = listOf(
+            "google/gemini-3-flash-preview" to "google/gemini-3-flash-preview",
+            "google/gemini-2.0-flash-001" to "google/gemini-2.0-flash-001",
+            ctx.getString(R.string.voice_custom_model) to "custom",
+        )
+        ListPreference(setting, items, Defaults.PREF_VOICE_MODEL)
+    },
+    Setting(context, Settings.PREF_VOICE_MODEL_CUSTOM, R.string.voice_model_custom, R.string.voice_model_custom_summary) {
+        TextInputPreference(it, Defaults.PREF_VOICE_MODEL_CUSTOM)
+    },
 )
 
 @Composable

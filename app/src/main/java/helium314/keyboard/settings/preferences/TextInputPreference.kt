@@ -15,13 +15,14 @@ import helium314.keyboard.settings.dialogs.TextInputDialog
 import androidx.core.content.edit
 
 @Composable
-fun TextInputPreference(setting: Setting, default: String, info: String? = null, checkTextValid: (String) -> Boolean = { true }) {
+fun TextInputPreference(setting: Setting, default: String, info: String? = null, isPassword: Boolean = false, checkTextValid: (String) -> Boolean = { true }) {
     var showDialog by rememberSaveable { mutableStateOf(false) }
     val prefs = LocalContext.current.prefs()
+    val currentValue = prefs.getString(setting.key, default)?.takeIf { it.isNotEmpty() }
     Preference(
         name = setting.title,
         onClick = { showDialog = true },
-        description = prefs.getString(setting.key, default)?.takeIf { it.isNotEmpty() }
+        description = if (isPassword && currentValue != null) "••••••••" else currentValue
     )
     if (showDialog) {
         TextInputDialog(
