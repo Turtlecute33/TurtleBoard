@@ -54,7 +54,7 @@ class AudioRecorder {
             isRecording = true
             audioRecord?.startRecording()
 
-            recordingThread = Thread("AudioRecording") {
+            recordingThread = Thread {
                 val buffer = ByteArray(bufferSize)
                 val startTime = System.currentTimeMillis()
                 while (isRecording) {

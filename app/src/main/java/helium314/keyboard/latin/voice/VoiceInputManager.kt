@@ -102,7 +102,7 @@ class VoiceInputManager(
 
         val client = OpenRouterClient(apiKey, model)
 
-        Thread("VoiceTranscription") {
+        Thread {
             try {
                 val transcription = client.transcribe(wavData)
                 mainHandler.post {
