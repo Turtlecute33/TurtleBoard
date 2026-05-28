@@ -335,22 +335,58 @@ private fun stageBackup(ctx: android.content.Context, inputStream: InputStream):
 private fun applyStagedBackup(ctx: android.content.Context, backup: StagedBackup) {
     val filesDir = ctx.filesDir ?: error("Files directory unavailable")
     val protectedFilesDir = DeviceProtectedUtils.getFilesDir(ctx)
+    val rollbackRoot = File(ctx.cacheDir, "backup_restore_rollback_${System.currentTimeMillis()}")
+    val rollbackFilesDir = File(rollbackRoot, "files")
+    val rollbackProtectedFilesDir = File(rollbackRoot, "device_protected")
     filesDir.mkdirs()
     protectedFilesDir.mkdirs()
-    copyDirectoryContents(backup.filesDir, filesDir)
-    copyDirectoryContents(backup.protectedFilesDir, protectedFilesDir)
-    backup.prefs?.let { snapshot ->
-        ctx.prefs().edit {
-            clear()
-            putAll(snapshot)
+    try {
+        snapshotAllowedFiles(filesDir, rollbackFilesDir)
+        snapshotAllowedFiles(protectedFilesDir, rollbackProtectedFilesDir)
+        copyDirectoryContents(backup.filesDir, filesDir)
+        copyDirectoryContents(backup.protectedFilesDir, protectedFilesDir)
+        backup.prefs?.let { snapshot ->
+            ctx.prefs().edit {
+                clear()
+                putAll(snapshot)
+            }
         }
-    }
-    backup.protectedPrefs?.let { snapshot ->
-        ctx.protectedPrefs().edit {
-            clear()
-            putAll(snapshot)
+        backup.protectedPrefs?.let { snapshot ->
+            ctx.protectedPrefs().edit {
+                clear()
+                putAll(snapshot)
+            }
         }
+    } catch (t: Throwable) {
+        restoreAllowedFiles(rollbackFilesDir, filesDir)
+        restoreAllowedFiles(rollbackProtectedFilesDir, protectedFilesDir)
+        throw t
+    } finally {
+        rollbackRoot.deleteRecursively()
     }
+}
+
+private fun snapshotAllowedFiles(source: File, target: File) {
+    if (!source.exists()) return
+    source.walkTopDown()
+        .filter { it.isFile && isAllowedBackupFile(it.relativeTo(source).path) }
+        .forEach { file ->
+            file.inputStream().buffered().use { input ->
+                FileUtils.copyStreamToNewFile(input, File(target, file.relativeTo(source).path))
+            }
+        }
+}
+
+private fun restoreAllowedFiles(snapshot: File, target: File) {
+    deleteAllowedBackupFiles(target)
+    copyDirectoryContents(snapshot, target)
+}
+
+private fun deleteAllowedBackupFiles(root: File) {
+    if (!root.exists()) return
+    root.walkBottomUp()
+        .filter { it.isFile && isAllowedBackupFile(it.relativeTo(root).path) }
+        .forEach { it.delete() }
 }
 
 private fun copyDirectoryContents(source: File, target: File) {

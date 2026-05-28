@@ -26,9 +26,10 @@ class Database private constructor(context: Context, name: String = NAME) : SQLi
         private const val VERSION = 2
         const val NAME = "heliboard.db"
         private var instance: Database? = null
+        @Synchronized
         fun getInstance(context: Context): Database {
             if (instance == null)
-                instance = Database(context)
+                instance = Database(context.applicationContext)
             return instance!!
         }
 

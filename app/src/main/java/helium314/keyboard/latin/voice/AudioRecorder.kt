@@ -13,6 +13,7 @@ import java.io.File
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -128,15 +129,25 @@ class AudioRecorder(
             val deferred = CompletableDeferred<File?>()
             completion = deferred
             recordingJob = recordingScope.launch(CoroutineName("AudioRecorder")) {
-                try {
-                    runRecordingLoop(bufferSize)
-                } finally {
-                    // Resource release and file finalization happen on the recording thread,
-                    // so callers (including the IME main thread) never have to block waiting
-                    // for the loop to drain.
-                    cleanupAudioRecord()
-                    deferred.complete(finalizeOutputFile())
+                val file = try {
+                    try {
+                        runRecordingLoop(bufferSize)
+                    } finally {
+                        // Resource release and file finalization happen on the recording thread,
+                        // so callers (including the IME main thread) never have to block waiting
+                        // for the loop to drain.
+                        cleanupAudioRecord()
+                    }
+                    finalizeOutputFile()
+                } catch (_: CancellationException) {
+                    cleanupRecordingFailure()
+                    null
+                } catch (t: Throwable) {
+                    Log.e(TAG, "Recording failed", t)
+                    cleanupRecordingFailure()
+                    null
                 }
+                deferred.complete(file)
             }
             true
         } catch (e: SecurityException) {
@@ -308,6 +319,18 @@ class AudioRecorder(
         releaseAudioEffects()
         try { audioRecord?.release() } catch (_: Throwable) {}
         audioRecord = null
+    }
+
+    private fun cleanupRecordingFailure() {
+        isRecording = false
+        recordingStartMs = 0L
+        recordingJob = null
+        closeOutputSafely()
+        releaseAudioEffects()
+        try { audioRecord?.release() } catch (_: Throwable) {}
+        audioRecord = null
+        if (outputFile.exists()) outputFile.delete()
+        resetCounters()
     }
 
     private fun closeOutputSafely() {
