@@ -44,6 +44,7 @@ import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.IOException
+import java.util.Collections
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
@@ -834,7 +835,9 @@ private class DictionaryGroup(
     // ConcurrentHashMap-backed set: isBlacklisted() runs on the suggestion worker while
     // addToBlacklist()/removeFromBlacklist() are invoked from other threads, so a plain HashSet
     // can throw ConcurrentModificationException or return inconsistent reads.
-    private val blacklist: MutableSet<String> = ConcurrentHashMap.newKeySet<String>().apply {
+    // NB: Collections.newSetFromMap(ConcurrentHashMap()) rather than ConcurrentHashMap.newKeySet(),
+    // which is API 24+ and would NoSuchMethodError on our minSdk-21 floor (Android 5.0-6.0).
+    private val blacklist: MutableSet<String> = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>()).apply {
         if (blacklistFile?.isFile != true) return@apply
         scope.launch {
             try {
