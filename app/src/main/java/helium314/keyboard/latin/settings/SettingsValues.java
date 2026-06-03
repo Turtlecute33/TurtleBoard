@@ -150,6 +150,7 @@ public class SettingsValues {
     public final boolean mSecondaryStripVisible;
     public final int mKeypressVibrationDuration;
     public final int mKeypressVibrationIntensity;
+    public final boolean mKeyPressRippleEnabled;
     public final float mKeypressSoundVolume;
     public final boolean mAutoCorrectionEnabledPerUserSettings;
     public final boolean mAutoCorrectEnabled;
@@ -257,6 +258,7 @@ public class SettingsValues {
         mKeyLongpressTimeout = prefs.getInt(Settings.PREF_KEY_LONGPRESS_TIMEOUT, Defaults.PREF_KEY_LONGPRESS_TIMEOUT);
         mKeypressVibrationDuration = prefs.getInt(Settings.PREF_VIBRATION_DURATION_SETTINGS, Defaults.PREF_VIBRATION_DURATION_SETTINGS);
         mKeypressVibrationIntensity = prefs.getInt(Settings.PREF_VIBRATION_INTENSITY, Defaults.PREF_VIBRATION_INTENSITY);
+        mKeyPressRippleEnabled = prefs.getBoolean(Settings.PREF_KEY_PRESS_RIPPLE, Defaults.PREF_KEY_PRESS_RIPPLE);
         mKeypressSoundVolume = prefs.getFloat(Settings.PREF_KEYPRESS_SOUND_VOLUME, Defaults.PREF_KEYPRESS_SOUND_VOLUME);
         mEnableEmojiAltPhysicalKey = prefs.getBoolean(Settings.PREF_ENABLE_EMOJI_ALT_PHYSICAL_KEY, Defaults.PREF_ENABLE_EMOJI_ALT_PHYSICAL_KEY);
         mGestureInputEnabled = JniUtils.sHaveGestureLib && prefs.getBoolean(Settings.PREF_GESTURE_INPUT, Defaults.PREF_GESTURE_INPUT);
@@ -449,6 +451,8 @@ public class SettingsValues {
         sb.append("" + mKeypressVibrationDuration);
         sb.append("\n   mKeypressVibrationIntensity = ");
         sb.append("" + mKeypressVibrationIntensity);
+        sb.append("\n   mKeyPressRippleEnabled = ");
+        sb.append("" + mKeyPressRippleEnabled);
         sb.append("\n   mKeypressSoundVolume = ");
         sb.append("" + mKeypressSoundVolume);
         sb.append("\n   mAutoCorrectEnabled = ");

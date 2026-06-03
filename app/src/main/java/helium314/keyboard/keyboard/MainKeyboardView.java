@@ -210,6 +210,7 @@ public final class MainKeyboardView extends KeyboardView implements DrawingProxy
 
         mKeyPressRippleDrawingPreview = new KeyPressRippleDrawingPreview(getResources().getDisplayMetrics().density);
         mKeyPressRippleDrawingPreview.setDrawingView(drawingPreviewPlacerView);
+        // Actual enabled state is driven by the user setting via setKeyPressRippleEnabled().
         mKeyPressRippleDrawingPreview.setPreviewEnabled(true);
         mainKeyboardViewAttr.recycle();
 
@@ -417,6 +418,10 @@ public final class MainKeyboardView extends KeyboardView implements DrawingProxy
 
     public void setSlidingKeyInputPreviewEnabled(final boolean enabled) {
         mSlidingKeyInputDrawingPreview.setPreviewEnabled(enabled);
+    }
+
+    public void setKeyPressRippleEnabled(final boolean enabled) {
+        mKeyPressRippleDrawingPreview.setPreviewEnabled(enabled);
     }
 
     @Override

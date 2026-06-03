@@ -34,6 +34,8 @@
     <string name="show_emoji_descriptions">Show emoji description on long press</string>
     <!-- Option to control whether or not to show a popup with a larger font on each key press. -->
     <string name="popup_on_keypress">Popup on keypress</string>
+    <!-- Option to control whether a brief expanding ring (ripple) is drawn at each key press. -->
+    <string name="key_press_ripple">Ripple on keypress</string>
     <!-- Option whether the keyboard can be hidden by swiping down on the toolbar -->
     <string name="toolbar_swipe_down_to_hide">Hide keyboard by swipe</string>
     <!-- Description for toolbar_swipe_down_to_hide -->
