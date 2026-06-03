@@ -58,6 +58,8 @@ fun PreferencesScreen(
         if (vibrateOn)
             Settings.PREF_VIBRATION_DURATION_SETTINGS else null,
         if (vibrateOn)
+            Settings.PREF_VIBRATION_INTENSITY else null,
+        if (vibrateOn)
             Settings.PREF_VIBRATE_IN_DND_MODE else null,
         if (AudioAndHapticFeedbackManager.getInstance().hasVibrator())
             Settings.PREF_POPUP_DRAG_HAPTIC else null,
