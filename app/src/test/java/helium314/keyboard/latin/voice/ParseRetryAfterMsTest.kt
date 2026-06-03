@@ -43,6 +43,11 @@ class ParseRetryAfterMsTest {
     }
 
     @Test
+    fun hugeSecondsValueIsClampedWithoutOverflow() {
+        assertEquals(30_000L, client.parseRetryAfterMs(Long.MAX_VALUE.toString()))
+    }
+
+    @Test
     fun httpDateTenSecondsInFutureIsApproximatelyTenThousandMs() {
         val futureMs = System.currentTimeMillis() + 10_000L
         // RFC 1123 / HTTP-date format.

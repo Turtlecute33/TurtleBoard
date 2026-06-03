@@ -380,11 +380,13 @@ class GestureDataDao(val db: Database) {
     }
 
     fun getJsonData(ids: List<Long>): Sequence<String> = synchronized(this) { sequence {
+        if (ids.isEmpty()) return@sequence
+        val (where, args) = idInSelection(ids)
         db.readableDatabase.query(
             TABLE,
             arrayOf(COLUMN_DATA),
-            "$COLUMN_ID IN (${ids.joinToString(",")})",
-            null,
+            where,
+            args,
             null,
             null,
             null
@@ -413,27 +415,28 @@ class GestureDataDao(val db: Database) {
 
     fun markAsExported(ids: List<Long>, context: Context) = synchronized(this) {
         if (ids.isEmpty()) return
+        val (where, args) = idInSelection(ids)
         val cv = ContentValues(1)
         cv.put(COLUMN_EXPORTED, 1)
-        db.writableDatabase.update(TABLE, cv, "$COLUMN_ID IN (${ids.joinToString(",")})", null)
+        db.writableDatabase.update(TABLE, cv, where, args)
         if (count(exported = false, activeMode = false) < context.prefs().getInt(PREF_PASSIVE_NOTIFY_COUNT, 0))
             context.prefs().edit { remove(PREF_PASSIVE_NOTIFY_COUNT) } // reset if we exported passive data
     }
 
     fun delete(ids: List<Long>, onlyExported: Boolean, context: Context): Int = synchronized(this) {
         if (ids.isEmpty()) return 0
-        val where = "$COLUMN_ID IN (${ids.joinToString(",")})"
+        val (where, args) = idInSelection(ids)
         val whereExported = " AND $COLUMN_EXPORTED <> 0"
         val count: Int
         if (onlyExported) {
-            count = db.writableDatabase.delete(TABLE, where + whereExported, null)
+            count = db.writableDatabase.delete(TABLE, where + whereExported, args)
             addExportedActiveDeletionCount(context, count) // actually we could also have a counter in the db
         } else {
-            val exportedCount = db.readableDatabase.rawQuery("SELECT COUNT(1) FROM $TABLE WHERE $where$whereExported", null).use {
+            val exportedCount = db.readableDatabase.rawQuery("SELECT COUNT(1) FROM $TABLE WHERE $where$whereExported", args).use {
                 it.moveToFirst()
                 it.getInt(0)
             }
-            count = db.writableDatabase.delete(TABLE, where, null)
+            count = db.writableDatabase.delete(TABLE, where, args)
             addExportedActiveDeletionCount(context, exportedCount)
         }
         return count
@@ -444,11 +447,12 @@ class GestureDataDao(val db: Database) {
     }
 
     fun deletePassiveWords(words: Collection<String>) = synchronized(this) {
-        val wordsString = words.joinToString("','") { it.lowercase() }
+        if (words.isEmpty()) return@synchronized 0
+        val placeholders = words.joinToString(",") { "?" }
         db.writableDatabase.delete(
             TABLE,
-            "$COLUMN_SOURCE_ACTIVE <> 0 AND LOWER($COLUMN_WORD) in (?)",
-            arrayOf(wordsString)
+            "$COLUMN_SOURCE_ACTIVE <> 0 AND LOWER($COLUMN_WORD) IN ($placeholders)",
+            words.map { it.lowercase() }.toTypedArray()
         )
     }
 
@@ -506,5 +510,8 @@ class GestureDataDao(val db: Database) {
                 }
             return instance
         }
+
+        private fun idInSelection(ids: List<Long>): Pair<String, Array<String>> =
+            "$COLUMN_ID IN (${ids.joinToString(",") { "?" }})" to ids.map { it.toString() }.toTypedArray()
     }
 }

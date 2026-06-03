@@ -15,9 +15,6 @@ import helium314.keyboard.latin.common.Constants.Separators
 import helium314.keyboard.latin.settings.Defaults
 import helium314.keyboard.latin.settings.Settings
 import helium314.keyboard.latin.utils.ToolbarKey.*
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import java.util.EnumMap
 import java.util.Locale
 
@@ -38,10 +35,9 @@ fun setToolbarButtonsActivatedStateOnPrefChange(buttonsGroup: ViewGroup, key: St
         && key?.startsWith(Settings.PREF_ONE_HANDED_MODE_PREFIX) == false)
         return
 
-    GlobalScope.launch {
-        delay(10) // need to wait until SettingsValues are reloaded
+    buttonsGroup.postDelayed({
         buttonsGroup.forEach { if (it is ImageButton) setToolbarButtonActivatedState(it) }
-    }
+    }, 10) // need to wait until SettingsValues are reloaded
 }
 
 private fun setToolbarButtonActivatedState(button: ImageButton) {

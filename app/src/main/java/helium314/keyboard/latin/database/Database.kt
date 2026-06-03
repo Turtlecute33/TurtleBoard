@@ -2,6 +2,7 @@
 package helium314.keyboard.latin.database
 
 import android.content.Context
+import android.content.ContentValues
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import androidx.core.database.sqlite.transaction
@@ -55,8 +56,13 @@ class Database private constructor(context: Context, name: String = NAME) : SQLi
                 .use { c ->
                     db.writableDatabase.transaction {
                         while (c.moveToNext()) {
-                            execSQL("INSERT INTO GESTURE_DATA (TIMESTAMP, WORD, EXPORTED, SOURCE_ACTIVE, DATA) " +
-                                "VALUES (${c.getLong(0)},?,${c.getInt(2)},${c.getInt(3)},?)", arrayOf(c.getString(1), c.getString(4)))
+                            val cv = ContentValues(5)
+                            cv.put("TIMESTAMP", c.getLong(0))
+                            cv.put("WORD", c.getString(1))
+                            cv.put("EXPORTED", c.getInt(2))
+                            cv.put("SOURCE_ACTIVE", c.getInt(3))
+                            cv.put("DATA", c.getString(4))
+                            insert("GESTURE_DATA", null, cv)
                         }
                     }
                 }

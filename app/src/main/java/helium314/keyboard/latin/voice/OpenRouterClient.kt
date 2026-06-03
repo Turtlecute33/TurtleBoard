@@ -612,6 +612,7 @@ class OpenRouterClient(
         if (raw.isEmpty()) return -1L
         raw.toLongOrNull()?.let { seconds ->
             if (seconds < 0) return -1L
+            if (seconds > MAX_RETRY_AFTER_MS / 1000L) return MAX_RETRY_AFTER_MS
             return (seconds * 1000L).coerceIn(0L, MAX_RETRY_AFTER_MS)
         }
         return try {
