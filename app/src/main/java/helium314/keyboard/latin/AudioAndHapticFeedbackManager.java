@@ -14,6 +14,8 @@ import android.os.Vibrator;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
 
+import androidx.annotation.RequiresApi;
+
 import helium314.keyboard.event.HapticEvent;
 import helium314.keyboard.keyboard.internal.keyboard_parser.floris.KeyCode;
 import helium314.keyboard.latin.common.Constants;
@@ -99,6 +101,91 @@ public final class AudioAndHapticFeedbackManager {
         mVibrator.vibrate(milliseconds);
     }
 
+    /**
+     * Plays a multi-pulse vibration pattern (off, on, off, on, …). Used for distinct voice cues
+     * such as a "buzz-buzz" failure or a light confirming double-tap on success.
+     */
+    public void vibratePattern(final long[] timings) {
+        if (mVibrator == null || timings == null || timings.length == 0) return;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                mVibrator.vibrate(VibrationEffect.createWaveform(timings, -1));
+                return;
+            }
+        } catch (final Exception ignore) {
+            // fall through to legacy pattern vibration
+        }
+        mVibrator.vibrate(timings, -1);
+    }
+
+    /**
+     * Plays a one-off sample of the keypress haptic at the given intensity (1..100, or -1 for the
+     * device default amplitude). Used by the settings slider so users can feel the strength as they
+     * drag it. Bypasses the vibrate-on-keypress toggle, like the duration slider preview.
+     */
+    public void vibratePreview(final int intensityPercent) {
+        vibrateForEvent(HapticEvent.KEY_PRESS, -1, intensityPercent);
+    }
+
+    /**
+     * Builds the most refined vibration the device can produce for a given event, scaled by the
+     * user's intensity preference. Preference of fidelity:
+     *   1. Composed haptic primitives (Android 12+/R) — crisp, low-latency, OS-tuned. Used when no
+     *      explicit duration is requested so we get the "premium click" feel.
+     *   2. Amplitude-controlled one-shot (Android 8+) — honours an explicit duration and intensity.
+     *   3. Legacy timed buzz — last resort on old/limited vibrators.
+     */
+    private void vibrateForEvent(final HapticEvent hapticEvent, final int durationPref, final int intensityPref) {
+        if (mVibrator == null || !mVibrator.hasVibrator()) return;
+        if (intensityPref == 0) return;
+        if (durationPref < 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                && vibrateComposed(hapticEvent, intensityPref)) {
+            return;
+        }
+        final long duration = durationPref >= 0 ? durationPref : defaultDurationMs(hapticEvent);
+        if (duration <= 0) return;
+        vibrateOneShot(duration, intensityPref);
+    }
+
+    @RequiresApi(Build.VERSION_CODES.R)
+    private boolean vibrateComposed(final HapticEvent hapticEvent, final int intensityPref) {
+        final int primitive = hapticEvent == HapticEvent.KEY_LONG_PRESS
+                ? VibrationEffect.Composition.PRIMITIVE_CLICK
+                : VibrationEffect.Composition.PRIMITIVE_TICK;
+        try {
+            if (!mVibrator.areAllPrimitivesSupported(primitive)) return false;
+            final float scale = intensityPref >= 0
+                    ? Math.min(intensityPref / 100f, 1f)
+                    : 1f;
+            mVibrator.vibrate(VibrationEffect.startComposition()
+                    .addPrimitive(primitive, scale)
+                    .compose());
+            return true;
+        } catch (final Exception ignore) {
+            // Some OEM vibrators advertise primitives but reject composition — fall back.
+            return false;
+        }
+    }
+
+    private void vibrateOneShot(final long duration, final int intensityPref) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                final int amplitude = (intensityPref >= 0 && mVibrator.hasAmplitudeControl())
+                        ? Math.min(Math.max(intensityPref * 255 / 100, 1), 255)
+                        : VibrationEffect.DEFAULT_AMPLITUDE;
+                mVibrator.vibrate(VibrationEffect.createOneShot(duration, amplitude));
+                return;
+            } catch (final Exception ignore) {
+                // fall through to legacy timed vibration
+            }
+        }
+        mVibrator.vibrate(duration);
+    }
+
+    private static long defaultDurationMs(final HapticEvent hapticEvent) {
+        return hapticEvent == HapticEvent.KEY_LONG_PRESS ? 20L : 10L;
+    }
+
     private boolean reevaluateIfSoundIsOn() {
         if (mSettingsValues == null || !mSettingsValues.mSoundOn || mAudioManager == null || mDoNotDisturb) {
             return false;
@@ -134,8 +221,12 @@ public final class AudioAndHapticFeedbackManager {
             // Avoid surprises with the handling of HapticFeedbackConstants.NO_HAPTICS
             return;
         }
-        if (hapticEvent.allowCustomDuration && mSettingsValues.mKeypressVibrationDuration >= 0) {
-            vibrate(mSettingsValues.mKeypressVibrationDuration);
+        final int duration = mSettingsValues.mKeypressVibrationDuration;
+        final int intensity = mSettingsValues.mKeypressVibrationIntensity;
+        if (hapticEvent.allowCustomDuration && (duration >= 0 || intensity >= 0)) {
+            // The user dialled in a duration and/or intensity: build a precise effect so the feel is
+            // consistent across devices instead of deferring to each OEM's haptic constant.
+            vibrateForEvent(hapticEvent, duration, intensity);
             return;
         }
         // Go ahead with the system default

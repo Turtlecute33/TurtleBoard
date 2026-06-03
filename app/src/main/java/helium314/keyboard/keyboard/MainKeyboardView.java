@@ -37,6 +37,7 @@ import helium314.keyboard.keyboard.internal.DrawingProxy;
 import helium314.keyboard.keyboard.internal.GestureFloatingTextDrawingPreview;
 import helium314.keyboard.keyboard.internal.GestureTrailsDrawingPreview;
 import helium314.keyboard.keyboard.internal.KeyDrawParams;
+import helium314.keyboard.keyboard.internal.KeyPressRippleDrawingPreview;
 import helium314.keyboard.keyboard.internal.KeyPreviewChoreographer;
 import helium314.keyboard.keyboard.internal.KeyPreviewDrawParams;
 import helium314.keyboard.keyboard.internal.KeyPreviewView;
@@ -101,6 +102,7 @@ public final class MainKeyboardView extends KeyboardView implements DrawingProxy
     private final GestureFloatingTextDrawingPreview mGestureFloatingTextDrawingPreview;
     private final GestureTrailsDrawingPreview mGestureTrailsDrawingPreview;
     private final SlidingKeyInputDrawingPreview mSlidingKeyInputDrawingPreview;
+    private final KeyPressRippleDrawingPreview mKeyPressRippleDrawingPreview;
 
     // Key preview
     private final KeyPreviewDrawParams mKeyPreviewDrawParams;
@@ -205,6 +207,10 @@ public final class MainKeyboardView extends KeyboardView implements DrawingProxy
 
         mSlidingKeyInputDrawingPreview = new SlidingKeyInputDrawingPreview(mainKeyboardViewAttr);
         mSlidingKeyInputDrawingPreview.setDrawingView(drawingPreviewPlacerView);
+
+        mKeyPressRippleDrawingPreview = new KeyPressRippleDrawingPreview(getResources().getDisplayMetrics().density);
+        mKeyPressRippleDrawingPreview.setDrawingView(drawingPreviewPlacerView);
+        mKeyPressRippleDrawingPreview.setPreviewEnabled(true);
         mainKeyboardViewAttr.recycle();
 
         mDrawingPreviewPlacerView = drawingPreviewPlacerView;
@@ -360,6 +366,12 @@ public final class MainKeyboardView extends KeyboardView implements DrawingProxy
     public void onKeyPressed(@NonNull final Key key, final boolean withPreview) {
         key.onPressed();
         invalidateKey(key);
+
+        // Spawn a subtle ripple at the key centre on the overlay (above the buffered keys).
+        locatePreviewPlacerView();
+        mKeyPressRippleDrawingPreview.addRipple(
+                key.getX() + key.getWidth() / 2f,
+                key.getY() + key.getHeight() / 2f);
 
         final Keyboard keyboard = getKeyboard();
         if (keyboard == null) {

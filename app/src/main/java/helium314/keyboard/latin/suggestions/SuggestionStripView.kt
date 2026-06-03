@@ -21,6 +21,7 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.View.OnLongClickListener
+import android.view.animation.DecelerateInterpolator
 import android.view.ViewGroup
 import android.view.accessibility.AccessibilityEvent
 import android.widget.ImageButton
@@ -264,6 +265,19 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         )
         isExternalSuggestionVisible = false
         updateKeys()
+        animateSuggestionsIn()
+    }
+
+    // Gentle, fast fade so refreshed suggestions ease in instead of hard-swapping on every keystroke.
+    // Kept short and subtle to stay smooth during fast typing.
+    private fun animateSuggestionsIn() {
+        suggestionsStrip.animate().cancel()
+        suggestionsStrip.alpha = SUGGESTIONS_FADE_IN_START_ALPHA
+        suggestionsStrip.animate()
+            .alpha(1f)
+            .setDuration(SUGGESTIONS_FADE_IN_DURATION)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
     }
 
     fun setExternalSuggestionView(view: View?, addCloseButton: Boolean) {
@@ -655,6 +669,8 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         @JvmField
         var DEBUG_SUGGESTIONS = false
         private const val DEBUG_INFO_TEXT_SIZE_IN_DIP = 6.5f
+        private const val SUGGESTIONS_FADE_IN_DURATION = 80L
+        private const val SUGGESTIONS_FADE_IN_START_ALPHA = 0.65f
         private val TAG = SuggestionStripView::class.java.simpleName
     }
 }

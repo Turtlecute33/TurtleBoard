@@ -204,6 +204,19 @@ fun createPreferencesSettings(context: Context) = listOf(
             onValueChanged = { it?.let { AudioAndHapticFeedbackManager.getInstance().vibrate(it.toLong()) } }
         )
     },
+    Setting(context, Settings.PREF_VIBRATION_INTENSITY, R.string.prefs_keypress_vibration_intensity_settings) { setting ->
+        SliderPreference(
+            name = setting.title,
+            key = setting.key,
+            default = Defaults.PREF_VIBRATION_INTENSITY,
+            description = {
+                if (it < 0) stringResource(R.string.settings_system_default)
+                else "$it%"
+            },
+            range = -1f..100f,
+            onValueChanged = { it?.let { AudioAndHapticFeedbackManager.getInstance().vibratePreview(it.toInt()) } }
+        )
+    },
     Setting(context, Settings.PREF_KEYPRESS_SOUND_VOLUME, R.string.prefs_keypress_sound_volume_settings) { setting ->
         val audioManager = LocalContext.current.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         SliderPreference(
