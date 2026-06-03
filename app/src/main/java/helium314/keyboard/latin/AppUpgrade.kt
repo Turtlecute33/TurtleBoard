@@ -557,7 +557,7 @@ private object AppUpgrade {
             }
         }
         if (oldVersion <= 3001 && prefs.getInt(Settings.PREF_CLIPBOARD_HISTORY_RETENTION_TIME, Defaults.PREF_CLIPBOARD_HISTORY_RETENTION_TIME) <= 0) {
-            prefs.edit { putInt(Settings.PREF_CLIPBOARD_HISTORY_RETENTION_TIME, 121) }
+            prefs.edit { putInt(Settings.PREF_CLIPBOARD_HISTORY_RETENTION_TIME, 1441) }
         }
         if (oldVersion <= 3002) {
             prefs.all.filterKeys { it.startsWith(Settings.PREF_USER_ALL_COLORS_PREFIX) }.forEach {
