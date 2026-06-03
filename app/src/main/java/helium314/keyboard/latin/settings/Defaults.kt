@@ -41,7 +41,7 @@ object Defaults {
     }
 
     private const val DEFAULT_SIZE_SCALE = 1.0f // 100%
-    const val PREF_THEME_STYLE = KeyboardTheme.STYLE_MATERIAL
+    const val PREF_THEME_STYLE = KeyboardTheme.STYLE_ROUNDED
     const val PREF_ICON_STYLE = KeyboardTheme.STYLE_MATERIAL
     const val PREF_THEME_COLORS = KeyboardTheme.THEME_LIGHT
     const val PREF_THEME_COLORS_NIGHT = KeyboardTheme.THEME_DARK
