@@ -62,7 +62,8 @@ class Database private constructor(context: Context, name: String = NAME) : SQLi
                             cv.put("EXPORTED", c.getInt(2))
                             cv.put("SOURCE_ACTIVE", c.getInt(3))
                             cv.put("DATA", c.getString(4))
-                            insert("GESTURE_DATA", null, cv)
+                            // throw on failure so the transaction rolls back instead of silently dropping rows
+                            insertOrThrow("GESTURE_DATA", null, cv)
                         }
                     }
                 }

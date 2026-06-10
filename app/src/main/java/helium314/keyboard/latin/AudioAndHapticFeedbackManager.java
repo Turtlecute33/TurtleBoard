@@ -34,6 +34,9 @@ public final class AudioAndHapticFeedbackManager {
     private SettingsValues mSettingsValues;
     private boolean mSoundOn;
     private boolean mDoNotDisturb;
+    // areAllPrimitivesSupported is a binder IPC and the answer is static per device — cache it
+    private Boolean mTickPrimitiveSupported;
+    private Boolean mClickPrimitiveSupported;
 
     private static final AudioAndHapticFeedbackManager sInstance =
             new AudioAndHapticFeedbackManager();
@@ -98,33 +101,48 @@ public final class AudioAndHapticFeedbackManager {
         if (mVibrator == null || milliseconds <= 0) {
             return;
         }
-        mVibrator.vibrate(milliseconds);
+        vibrateOneShot(milliseconds, -1);
+    }
+
+    /** Light confirming double-tap so a successful voice transcription "lands" tactilely. */
+    public void vibrateVoiceSuccess() {
+        vibratePattern(new long[]{0, 10, 30, 16});
+    }
+
+    /** Distinct "buzz-buzz" so a voice transcription failure is unmistakable without looking. */
+    public void vibrateVoiceError() {
+        vibratePattern(new long[]{0, 55, 80, 55});
     }
 
     /**
-     * Plays a multi-pulse vibration pattern (off, on, off, on, …). Used for distinct voice cues
-     * such as a "buzz-buzz" failure or a light confirming double-tap on success.
+     * Plays a multi-pulse vibration pattern (off, on, off, on, …), scaled by the user's
+     * keypress vibration intensity so cues match the feel the user dialled in.
      */
-    public void vibratePattern(final long[] timings) {
+    private void vibratePattern(final long[] timings) {
         if (mVibrator == null || timings == null || timings.length == 0) return;
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                mVibrator.vibrate(VibrationEffect.createWaveform(timings, -1));
-                return;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            final int intensity = mSettingsValues != null ? mSettingsValues.mKeypressVibrationIntensity : -1;
+            final int amplitude = (intensity >= 0 && mVibrator.hasAmplitudeControl())
+                    ? Math.min(Math.max(intensity * 255 / 100, 1), 255)
+                    : VibrationEffect.DEFAULT_AMPLITUDE;
+            final int[] amplitudes = new int[timings.length];
+            for (int i = 1; i < timings.length; i += 2) {
+                amplitudes[i] = amplitude;
             }
-        } catch (final Exception ignore) {
-            // fall through to legacy pattern vibration
+            mVibrator.vibrate(VibrationEffect.createWaveform(timings, amplitudes, -1));
+            return;
         }
         mVibrator.vibrate(timings, -1);
     }
 
     /**
-     * Plays a one-off sample of the keypress haptic at the given intensity (1..100, or -1 for the
-     * device default amplitude). Used by the settings slider so users can feel the strength as they
-     * drag it. Bypasses the vibrate-on-keypress toggle, like the duration slider preview.
+     * Plays a one-off sample of the keypress haptic with the given duration (ms, or -1 for the
+     * event default) and intensity (0..100, or -1 for the device default amplitude). Used by the
+     * settings sliders so users can feel exactly what real keypresses will feel like. Bypasses
+     * the vibrate-on-keypress toggle.
      */
-    public void vibratePreview(final int intensityPercent) {
-        vibrateForEvent(HapticEvent.KEY_PRESS, -1, intensityPercent);
+    public void vibratePreview(final int durationMs, final int intensityPercent) {
+        vibrateForEvent(HapticEvent.KEY_PRESS, durationMs, intensityPercent);
     }
 
     /**
@@ -153,7 +171,7 @@ public final class AudioAndHapticFeedbackManager {
                 ? VibrationEffect.Composition.PRIMITIVE_CLICK
                 : VibrationEffect.Composition.PRIMITIVE_TICK;
         try {
-            if (!mVibrator.areAllPrimitivesSupported(primitive)) return false;
+            if (!isPrimitiveSupported(primitive)) return false;
             final float scale = intensityPref >= 0
                     ? Math.min(intensityPref / 100f, 1f)
                     : 1f;
@@ -165,6 +183,18 @@ public final class AudioAndHapticFeedbackManager {
             // Some OEM vibrators advertise primitives but reject composition — fall back.
             return false;
         }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.R)
+    private boolean isPrimitiveSupported(final int primitive) {
+        if (primitive == VibrationEffect.Composition.PRIMITIVE_CLICK) {
+            if (mClickPrimitiveSupported == null)
+                mClickPrimitiveSupported = mVibrator.areAllPrimitivesSupported(primitive);
+            return mClickPrimitiveSupported;
+        }
+        if (mTickPrimitiveSupported == null)
+            mTickPrimitiveSupported = mVibrator.areAllPrimitivesSupported(primitive);
+        return mTickPrimitiveSupported;
     }
 
     private void vibrateOneShot(final long duration, final int intensityPref) {

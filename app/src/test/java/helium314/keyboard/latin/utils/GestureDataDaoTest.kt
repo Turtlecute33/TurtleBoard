@@ -17,13 +17,28 @@ class GestureDataDaoTest {
     @Test
     fun multiWordDeletionUsesIndividualSelectionArgs() {
         val dao = freshDao()
-        insertGestureWord("alpha", active = true)
-        insertGestureWord("bravo", active = true)
-        insertGestureWord("charlie", active = true)
+        insertGestureWord("alpha", active = false)
+        insertGestureWord("bravo", active = false)
+        insertGestureWord("charlie", active = false)
+        insertGestureWord("alpha", active = true) // active rows must survive passive deletion
 
         dao.deletePassiveWords(listOf("alpha", "bravo"))
 
-        assertEquals(listOf("charlie"), dao.filterInfos(activeMode = true).map { it.targetWord })
+        assertEquals(listOf("charlie"), dao.filterInfos(activeMode = false).map { it.targetWord })
+        assertEquals(listOf("alpha"), dao.filterInfos(activeMode = true).map { it.targetWord })
+    }
+
+    @Test
+    fun idSelectionsAreChunkedBelowSqliteBindVariableLimit() {
+        val dao = freshDao()
+        repeat(1100) { insertGestureWord("word$it", active = true) }
+        val ids = dao.filterInfos(activeMode = true, limit = 2000).map { it.id }
+        assertEquals(1100, ids.size)
+
+        dao.markAsExported(ids, context)
+        assertEquals(1100, dao.getJsonData(ids).count())
+        assertEquals(1100, dao.delete(ids, onlyExported = false, context))
+        assertEquals(0, dao.filterInfos(activeMode = true).size)
     }
 
     @Test

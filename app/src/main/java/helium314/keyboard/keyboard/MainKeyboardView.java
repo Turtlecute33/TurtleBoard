@@ -103,6 +103,7 @@ public final class MainKeyboardView extends KeyboardView implements DrawingProxy
     private final GestureTrailsDrawingPreview mGestureTrailsDrawingPreview;
     private final SlidingKeyInputDrawingPreview mSlidingKeyInputDrawingPreview;
     private final KeyPressRippleDrawingPreview mKeyPressRippleDrawingPreview;
+    private boolean mKeyPressRippleEnabled;
 
     // Key preview
     private final KeyPreviewDrawParams mKeyPreviewDrawParams;
@@ -210,8 +211,8 @@ public final class MainKeyboardView extends KeyboardView implements DrawingProxy
 
         mKeyPressRippleDrawingPreview = new KeyPressRippleDrawingPreview(getResources().getDisplayMetrics().density);
         mKeyPressRippleDrawingPreview.setDrawingView(drawingPreviewPlacerView);
-        // Actual enabled state is driven by the user setting via setKeyPressRippleEnabled().
-        mKeyPressRippleDrawingPreview.setPreviewEnabled(true);
+        // Enabled state is driven by the user setting via setKeyPressRippleEnabled(), applied
+        // whenever a keyboard is set on this view (KeyboardSwitcher.setKeyboard).
         mainKeyboardViewAttr.recycle();
 
         mDrawingPreviewPlacerView = drawingPreviewPlacerView;
@@ -369,10 +370,15 @@ public final class MainKeyboardView extends KeyboardView implements DrawingProxy
         invalidateKey(key);
 
         // Spawn a subtle ripple at the key centre on the overlay (above the buffered keys).
-        locatePreviewPlacerView();
-        mKeyPressRippleDrawingPreview.addRipple(
-                key.getX() + key.getWidth() / 2f,
-                key.getY() + key.getHeight() / 2f);
+        // Only for the key the user actually touched (withPreview is false for sibling shift
+        // keys and altCodeWhileTyping keys), and only when the feature is enabled, so the
+        // hot path pays nothing otherwise.
+        if (withPreview && mKeyPressRippleEnabled) {
+            locatePreviewPlacerView();
+            mKeyPressRippleDrawingPreview.addRipple(
+                    key.getX() + key.getWidth() / 2f,
+                    key.getY() + key.getHeight() / 2f);
+        }
 
         final Keyboard keyboard = getKeyboard();
         if (keyboard == null) {
@@ -421,6 +427,7 @@ public final class MainKeyboardView extends KeyboardView implements DrawingProxy
     }
 
     public void setKeyPressRippleEnabled(final boolean enabled) {
+        mKeyPressRippleEnabled = enabled;
         mKeyPressRippleDrawingPreview.setPreviewEnabled(enabled);
     }
 

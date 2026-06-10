@@ -34,6 +34,7 @@ public final class KeyPressRippleDrawingPreview extends AbstractDrawingPreview {
     private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final float mStartRadius;
     private final float mEndRadius;
+    private int mColor; // resolved on ripple spawn, not per frame
 
     public KeyPressRippleDrawingPreview(final float density) {
         for (int i = 0; i < MAX_RIPPLES; i++) {
@@ -50,6 +51,11 @@ public final class KeyPressRippleDrawingPreview extends AbstractDrawingPreview {
         if (!isPreviewEnabled()) {
             return;
         }
+        final var settingsValues = Settings.getValues();
+        if (settingsValues == null) {
+            return; // too early in startup to resolve the theme color
+        }
+        mColor = settingsValues.mColors.get(ColorType.GESTURE_TRAIL);
         final Ripple r = mRipples[mNextSlot];
         r.cx = x;
         r.cy = y;
@@ -64,7 +70,7 @@ public final class KeyPressRippleDrawingPreview extends AbstractDrawingPreview {
             return;
         }
         final long now = SystemClock.uptimeMillis();
-        final int color = Settings.getValues().mColors.get(ColorType.GESTURE_TRAIL);
+        mPaint.setColor(mColor);
         boolean anyAlive = false;
         for (final Ripple r : mRipples) {
             if (r.startTime == 0) {
@@ -78,7 +84,6 @@ public final class KeyPressRippleDrawingPreview extends AbstractDrawingPreview {
             anyAlive = true;
             final float eased = 1f - (1f - progress) * (1f - progress); // ease-out quad
             final float radius = mStartRadius + (mEndRadius - mStartRadius) * eased;
-            mPaint.setColor(color);
             mPaint.setAlpha((int) (START_ALPHA * (1f - progress)));
             canvas.drawCircle(r.cx, r.cy, radius, mPaint);
         }

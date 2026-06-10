@@ -379,25 +379,28 @@ class GestureDataDao(val db: Database) {
         return result
     }
 
-    fun getJsonData(ids: List<Long>): Sequence<String> = synchronized(this) { sequence {
-        if (ids.isEmpty()) return@sequence
-        val (where, args) = idInSelection(ids)
-        db.readableDatabase.query(
-            TABLE,
-            arrayOf(COLUMN_DATA),
-            where,
-            args,
-            null,
-            null,
-            null
-        ).use {
-            while (it.moveToNext()) {
-                yield(it.getString(0))
+    // not synchronized: the sequence would be consumed lazily outside any lock anyway,
+    // and SQLite guarantees per-query consistency
+    fun getJsonData(ids: List<Long>): Sequence<String> = sequence {
+        ids.chunked(MAX_SQL_VARS).forEach { chunk ->
+            val (where, args) = inSelection(COLUMN_ID, chunk)
+            db.readableDatabase.query(
+                TABLE,
+                arrayOf(COLUMN_DATA),
+                where,
+                args,
+                null,
+                null,
+                null
+            ).use {
+                while (it.moveToNext()) {
+                    yield(it.getString(0))
+                }
             }
         }
-    }}
+    }
 
-    fun getAllJsonData(): Sequence<String> = synchronized(this) { sequence {
+    fun getAllJsonData(): Sequence<String> = sequence {
         db.readableDatabase.query(
             TABLE,
             arrayOf(COLUMN_DATA),
@@ -411,34 +414,39 @@ class GestureDataDao(val db: Database) {
                 yield(it.getString(0))
             }
         }
-    }}
+    }
 
     fun markAsExported(ids: List<Long>, context: Context) = synchronized(this) {
         if (ids.isEmpty()) return
-        val (where, args) = idInSelection(ids)
         val cv = ContentValues(1)
         cv.put(COLUMN_EXPORTED, 1)
-        db.writableDatabase.update(TABLE, cv, where, args)
+        ids.chunked(MAX_SQL_VARS).forEach { chunk ->
+            val (where, args) = inSelection(COLUMN_ID, chunk)
+            db.writableDatabase.update(TABLE, cv, where, args)
+        }
         if (count(exported = false, activeMode = false) < context.prefs().getInt(PREF_PASSIVE_NOTIFY_COUNT, 0))
             context.prefs().edit { remove(PREF_PASSIVE_NOTIFY_COUNT) } // reset if we exported passive data
     }
 
     fun delete(ids: List<Long>, onlyExported: Boolean, context: Context): Int = synchronized(this) {
         if (ids.isEmpty()) return 0
-        val (where, args) = idInSelection(ids)
         val whereExported = " AND $COLUMN_EXPORTED <> 0"
-        val count: Int
-        if (onlyExported) {
-            count = db.writableDatabase.delete(TABLE, where + whereExported, args)
-            addExportedActiveDeletionCount(context, count) // actually we could also have a counter in the db
-        } else {
-            val exportedCount = db.readableDatabase.rawQuery("SELECT COUNT(1) FROM $TABLE WHERE $where$whereExported", args).use {
-                it.moveToFirst()
-                it.getInt(0)
+        var count = 0
+        var exportedCount = 0
+        ids.chunked(MAX_SQL_VARS).forEach { chunk ->
+            val (where, args) = inSelection(COLUMN_ID, chunk)
+            if (onlyExported) {
+                count += db.writableDatabase.delete(TABLE, where + whereExported, args)
+            } else {
+                exportedCount += db.readableDatabase.rawQuery("SELECT COUNT(1) FROM $TABLE WHERE $where$whereExported", args).use {
+                    it.moveToFirst()
+                    it.getInt(0)
+                }
+                count += db.writableDatabase.delete(TABLE, where, args)
             }
-            count = db.writableDatabase.delete(TABLE, where, args)
-            addExportedActiveDeletionCount(context, exportedCount)
         }
+        // actually we could also have a counter in the db
+        addExportedActiveDeletionCount(context, if (onlyExported) count else exportedCount)
         return count
     }
 
@@ -447,13 +455,10 @@ class GestureDataDao(val db: Database) {
     }
 
     fun deletePassiveWords(words: Collection<String>) = synchronized(this) {
-        if (words.isEmpty()) return@synchronized 0
-        val placeholders = words.joinToString(",") { "?" }
-        db.writableDatabase.delete(
-            TABLE,
-            "$COLUMN_SOURCE_ACTIVE <> 0 AND LOWER($COLUMN_WORD) IN ($placeholders)",
-            words.map { it.lowercase() }.toTypedArray()
-        )
+        words.map { it.lowercase() }.chunked(MAX_SQL_VARS).forEach { chunk ->
+            val (where, args) = inSelection("LOWER($COLUMN_WORD)", chunk)
+            db.writableDatabase.delete(TABLE, "$COLUMN_SOURCE_ACTIVE = 0 AND $where", args)
+        }
     }
 
     fun count(exported: Boolean? = null, activeMode: Boolean? = null): Int {
@@ -511,7 +516,10 @@ class GestureDataDao(val db: Database) {
             return instance
         }
 
-        private fun idInSelection(ids: List<Long>): Pair<String, Array<String>> =
-            "$COLUMN_ID IN (${ids.joinToString(",") { "?" }})" to ids.map { it.toString() }.toTypedArray()
+        // framework SQLite caps bind variables at 999 before Android 12, so callers chunk their value lists
+        private const val MAX_SQL_VARS = 999
+
+        private fun inSelection(expression: String, values: List<Any>): Pair<String, Array<String>> =
+            "$expression IN (${values.joinToString(",") { "?" }})" to values.map { it.toString() }.toTypedArray()
     }
 }

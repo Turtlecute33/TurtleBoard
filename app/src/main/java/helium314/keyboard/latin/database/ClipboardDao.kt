@@ -129,8 +129,9 @@ class ClipboardDao private constructor(private val db: Database) {
             return
 
         lastClearOldClips = SystemClock.elapsedRealtime()
-        val retentionTime = Settings.getValues()?.mClipboardHistoryRetentionTime ?: 1441L
-        if (retentionTime > 1440) return
+        val retentionTime = Settings.getValues()?.mClipboardHistoryRetentionTime
+            ?: Settings.CLIPBOARD_RETENTION_NO_LIMIT_MINUTES.toLong()
+        if (retentionTime >= Settings.CLIPBOARD_RETENTION_NO_LIMIT_MINUTES) return
         val minTime = System.currentTimeMillis() - retentionTime * 60 * 1000L
         if (!cache.removeAll { it.timeStamp < minTime && !it.isPinned })
             return // nothing was removed

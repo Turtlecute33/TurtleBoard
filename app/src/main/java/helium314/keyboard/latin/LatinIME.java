@@ -640,17 +640,15 @@ public class LatinIME extends InputMethodService implements
 
             @Override
             public void onTranscriptionResult(@NonNull final String text) {
-                // Light confirming double-tap so a successful transcription "lands" tactilely.
                 if (isVoiceHapticEnabled())
-                    AudioAndHapticFeedbackManager.getInstance().vibratePattern(new long[]{0, 10, 30, 16});
+                    AudioAndHapticFeedbackManager.getInstance().vibrateVoiceSuccess();
                 onTextInput(text);
             }
 
             @Override
             public void onError(@NonNull final String message) {
-                // Distinct "buzz-buzz" so a failure is unmistakable without looking.
                 if (isVoiceHapticEnabled())
-                    AudioAndHapticFeedbackManager.getInstance().vibratePattern(new long[]{0, 55, 80, 55});
+                    AudioAndHapticFeedbackManager.getInstance().vibrateVoiceError();
                 Toast.makeText(LatinIME.this, message, Toast.LENGTH_LONG).show();
             }
 

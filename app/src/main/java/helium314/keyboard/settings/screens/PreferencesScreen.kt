@@ -18,6 +18,7 @@ import helium314.keyboard.latin.settings.Defaults
 import helium314.keyboard.latin.settings.Settings
 import helium314.keyboard.latin.utils.SubtypeSettings
 import helium314.keyboard.latin.utils.locale
+import helium314.keyboard.latin.utils.prefs
 import helium314.keyboard.settings.preferences.ListPreference
 import helium314.keyboard.settings.Setting
 import helium314.keyboard.settings.preferences.ReorderSwitchPreference
@@ -188,16 +189,17 @@ fun createPreferencesSettings(context: Context) = listOf(
             key = setting.key,
             default = Defaults.PREF_CLIPBOARD_HISTORY_RETENTION_TIME,
             description = {
-                if (it > 1440) stringResource(R.string.settings_no_limit)
+                if (it >= Settings.CLIPBOARD_RETENTION_NO_LIMIT_MINUTES) stringResource(R.string.settings_no_limit)
                 else stringResource(R.string.abbreviation_unit_minutes, it.toString())
             },
-            range = 1f..1441f,
+            range = 1f..Settings.CLIPBOARD_RETENTION_NO_LIMIT_MINUTES.toFloat(),
         ) { ClipboardDao.getInstance(ctx)?.clearOldClips(true) }
     },
     Setting(context, Settings.PREF_CLIPBOARD_HISTORY_PINNED_FIRST, R.string.clipboard_history_pinned_first) {
         SwitchPreference(it, Defaults.PREF_CLIPBOARD_HISTORY_PINNED_FIRST)
     },
     Setting(context, Settings.PREF_VIBRATION_DURATION_SETTINGS, R.string.prefs_keypress_vibration_duration_settings) { setting ->
+        val ctx = LocalContext.current
         SliderPreference(
             name = setting.title,
             key = setting.key,
@@ -207,20 +209,30 @@ fun createPreferencesSettings(context: Context) = listOf(
                 else stringResource(R.string.abbreviation_unit_milliseconds, it.toString())
             },
             range = -1f..100f,
-            onValueChanged = { it?.let { AudioAndHapticFeedbackManager.getInstance().vibrate(it.toLong()) } }
+            // preview through the same path as real keypresses, honoring the current intensity
+            onValueChanged = { it?.let { v ->
+                val intensity = ctx.prefs().getInt(Settings.PREF_VIBRATION_INTENSITY, Defaults.PREF_VIBRATION_INTENSITY)
+                AudioAndHapticFeedbackManager.getInstance().vibratePreview(v.toInt(), intensity)
+            } }
         )
     },
     Setting(context, Settings.PREF_VIBRATION_INTENSITY, R.string.prefs_keypress_vibration_intensity_settings) { setting ->
+        val ctx = LocalContext.current
         SliderPreference(
             name = setting.title,
             key = setting.key,
             default = Defaults.PREF_VIBRATION_INTENSITY,
             description = {
                 if (it < 0) stringResource(R.string.settings_system_default)
+                else if (it == 0) stringResource(R.string.vibration_intensity_off)
                 else "$it%"
             },
             range = -1f..100f,
-            onValueChanged = { it?.let { AudioAndHapticFeedbackManager.getInstance().vibratePreview(it.toInt()) } }
+            // preview through the same path as real keypresses, honoring the current duration
+            onValueChanged = { it?.let { v ->
+                val duration = ctx.prefs().getInt(Settings.PREF_VIBRATION_DURATION_SETTINGS, Defaults.PREF_VIBRATION_DURATION_SETTINGS)
+                AudioAndHapticFeedbackManager.getInstance().vibratePreview(duration, v.toInt())
+            } }
         )
     },
     Setting(context, Settings.PREF_KEYPRESS_SOUND_VOLUME, R.string.prefs_keypress_sound_volume_settings) { setting ->

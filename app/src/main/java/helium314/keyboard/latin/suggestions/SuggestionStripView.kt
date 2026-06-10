@@ -271,12 +271,15 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     // Gentle, fast fade so refreshed suggestions ease in instead of hard-swapping on every keystroke.
     // Kept short and subtle to stay smooth during fast typing.
     private fun animateSuggestionsIn() {
+        if (!suggestionsStrip.isVisible) return // don't animate while the toolbar covers the strip
         suggestionsStrip.animate().cancel()
         suggestionsStrip.alpha = SUGGESTIONS_FADE_IN_START_ALPHA
         suggestionsStrip.animate()
             .alpha(1f)
+            .withLayer() // composite the strip once per frame instead of per child
             .setDuration(SUGGESTIONS_FADE_IN_DURATION)
             .setInterpolator(DecelerateInterpolator())
+            .withEndAction { suggestionsStrip.alpha = 1f } // a cancelled fade must not leave the strip translucent
             .start()
     }
 
@@ -417,6 +420,9 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         super.onDetachedFromWindow()
         dismissMoreSuggestionsPanel()
         viewScope.cancel()
+        // a fade cancelled by detaching must not leave the strip translucent on reattach
+        suggestionsStrip.animate().cancel()
+        suggestionsStrip.alpha = 1f
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
