@@ -1171,6 +1171,11 @@ New dictionary:
     <string name="voice_auto_stop_silence">Auto-stop on silence</string>
     <string name="voice_auto_stop_silence_summary">Stop recording after a short silence once you\'ve started speaking</string>
     <string name="voice_auto_stop_silence_seconds">Silence duration before auto-stop</string>
+    <string name="voice_mic_sensitivity">Microphone sensitivity</string>
+    <string name="voice_mic_sensitivity_summary">Boost quiet microphones. Raise this if recordings are wrongly rejected as \"No speech detected\".</string>
+    <string name="voice_mic_sensitivity_normal">Normal</string>
+    <string name="voice_mic_sensitivity_high">High (2×)</string>
+    <string name="voice_mic_sensitivity_max">Max (4×)</string>
     <string name="voice_language_hint">Send keyboard language as a hint</string>
     <string name="voice_language_hint_summary">Appends the active language to the transcription prompt for better accuracy</string>
     <string name="voice_space_heuristic">Smart spacing</string>

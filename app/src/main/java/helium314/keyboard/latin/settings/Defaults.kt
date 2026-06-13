@@ -207,6 +207,7 @@ object Defaults {
     const val PREF_VOICE_MAX_DURATION_SECONDS = 90
     const val PREF_VOICE_AUTO_STOP_SILENCE = false
     const val PREF_VOICE_AUTO_STOP_SILENCE_SECONDS = 2
+    const val PREF_VOICE_MIC_SENSITIVITY = "normal"
     const val PREF_VOICE_LANGUAGE_HINT = true
     const val PREF_VOICE_SPACE_HEURISTIC = true
     const val PREF_VOICE_HAPTIC_FEEDBACK = true

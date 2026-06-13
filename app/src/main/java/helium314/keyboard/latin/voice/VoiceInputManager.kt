@@ -84,6 +84,13 @@ class VoiceInputManager(
     /** Exposed so UI can render an elapsed-time counter. */
     fun getCurrentDurationMs(): Long = audioRecorder.currentDurationMs
 
+    /** Maps the mic-sensitivity preference to a linear capture gain. "normal" leaves audio untouched. */
+    private fun micSensitivityGain(value: String?): Float = when (value) {
+        "high" -> 2f
+        "max" -> 4f
+        else -> 1f
+    }
+
     @Synchronized
     fun startRecording(useDedicatedStt: Boolean = false) {
         if (state != State.IDLE) return
@@ -129,6 +136,9 @@ class VoiceInputManager(
         val autoStopEnabled = prefs.getBoolean(Settings.PREF_VOICE_AUTO_STOP_SILENCE, Defaults.PREF_VOICE_AUTO_STOP_SILENCE)
         val autoStopSec = prefs.getInt(Settings.PREF_VOICE_AUTO_STOP_SILENCE_SECONDS, Defaults.PREF_VOICE_AUTO_STOP_SILENCE_SECONDS)
             .coerceIn(1, 10)
+        val micGain = micSensitivityGain(
+            prefs.getString(Settings.PREF_VOICE_MIC_SENSITIVITY, Defaults.PREF_VOICE_MIC_SENSITIVITY)
+        )
 
         // Fresh cache file per recording; older ones are swept on every start so a process
         // killed mid-recording can't leak audio across sessions.
@@ -139,6 +149,7 @@ class VoiceInputManager(
             outputFile = audioFile,
             maxDurationMs = maxDurationSec * 1000L,
             autoStopSilenceMs = if (autoStopEnabled) autoStopSec * 1000L else 0L,
+            inputGain = micGain,
         )
         audioRecorder.onMaxDurationReached = {
             mainHandler.post {

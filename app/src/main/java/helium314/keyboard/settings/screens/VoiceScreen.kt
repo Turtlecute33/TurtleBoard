@@ -154,6 +154,7 @@ internal fun buildVoiceScreenItems(
     if (voiceInputEnabled) Settings.PREF_VOICE_LANGUAGE_HINT else null,
     if (voiceInputEnabled) Settings.PREF_VOICE_SPACE_HEURISTIC else null,
     if (voiceInputEnabled) Settings.PREF_VOICE_HAPTIC_FEEDBACK else null,
+    if (voiceInputEnabled) Settings.PREF_VOICE_MIC_SENSITIVITY else null,
     if (voiceInputEnabled) Settings.PREF_VOICE_MAX_DURATION_SECONDS else null,
     if (voiceInputEnabled) Settings.PREF_VOICE_AUTO_STOP_SILENCE else null,
     if (voiceInputEnabled && voiceAutoStop) Settings.PREF_VOICE_AUTO_STOP_SILENCE_SECONDS else null,
@@ -432,6 +433,15 @@ fun createVoiceSettings(context: Context) = listOf(
         R.string.voice_polish_model_custom_summary,
     ) {
         TextInputPreference(it, Defaults.PREF_VOICE_POLISH_MODEL_CUSTOM, checkTextValid = ::isValidCustomModelSlug)
+    },
+    Setting(context, Settings.PREF_VOICE_MIC_SENSITIVITY, R.string.voice_mic_sensitivity, R.string.voice_mic_sensitivity_summary) { setting ->
+        val ctx = LocalContext.current
+        val items = listOf(
+            ctx.getString(R.string.voice_mic_sensitivity_normal) to "normal",
+            ctx.getString(R.string.voice_mic_sensitivity_high) to "high",
+            ctx.getString(R.string.voice_mic_sensitivity_max) to "max",
+        )
+        ListPreference(setting, items, Defaults.PREF_VOICE_MIC_SENSITIVITY)
     },
     Setting(context, Settings.PREF_VOICE_MAX_DURATION_SECONDS, R.string.voice_max_duration, R.string.voice_max_duration_summary) { setting ->
         SliderPreference(
