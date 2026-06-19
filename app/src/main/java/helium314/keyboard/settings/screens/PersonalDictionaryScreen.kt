@@ -271,12 +271,21 @@ private fun getAll(locale: Locale?, context: Context): List<Word> {
 
     cursor.use {
         if (!it.moveToFirst()) return emptyList()
+        // Some system UserDictionary providers (e.g. on hardened/AOSP-variant ROMs) return a cursor
+        // without the expected columns. Use getColumnIndex (returns -1) instead of getColumnIndexOrThrow
+        // so we degrade gracefully to an empty/partial list instead of crashing the settings screen.
+        val wordIndex = it.getColumnIndex(UserDictionary.Words.WORD)
+        if (wordIndex < 0) return emptyList()
+        val shortcutIndex = it.getColumnIndex(UserDictionary.Words.SHORTCUT)
+        val frequencyIndex = it.getColumnIndex(UserDictionary.Words.FREQUENCY)
         val result = mutableListOf<Word>()
-        val wordIndex = it.getColumnIndexOrThrow(UserDictionary.Words.WORD)
-        val shortcutIndex = it.getColumnIndexOrThrow(UserDictionary.Words.SHORTCUT)
-        val frequencyIndex = it.getColumnIndexOrThrow(UserDictionary.Words.FREQUENCY)
         while (!it.isAfterLast) {
-            result.add(Word(it.getString(wordIndex), it.getString(shortcutIndex), it.getInt(frequencyIndex)))
+            val word = it.getString(wordIndex)
+            if (word != null) {
+                val shortcut = if (shortcutIndex < 0) null else it.getString(shortcutIndex)
+                val weight = if (frequencyIndex < 0) WEIGHT_FOR_USER_DICTIONARY_ADDS else it.getInt(frequencyIndex)
+                result.add(Word(word, shortcut, weight))
+            }
             it.moveToNext()
         }
         return result
