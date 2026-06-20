@@ -527,7 +527,11 @@ class KeyboardState(private val switchActions: SwitchActions) {
         }
         isInDoubleTapShiftKey = switchActions.isInDoubleTapShiftKeyTimeout
         if (isInDoubleTapShiftKey) {
-            if (alphabetShiftState.isManualShifted || isInAlphabetUnshiftedFromShifted) {
+            if (alphabetShiftState.isShiftLocked) {
+                // Caps lock is already on (e.g. just enabled via long-press). A quick tap should turn
+                // it back off rather than being swallowed by double-tap detection.
+                setShiftLocked(false)
+            } else if (alphabetShiftState.isManualShifted || isInAlphabetUnshiftedFromShifted) {
                 // Shift key has been double tapped while in manual shifted or automatic shifted state.
                 setShiftLocked(true)
             }

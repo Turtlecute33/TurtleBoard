@@ -78,6 +78,33 @@ class KeyboardStateTest {
         assertEquals(Layout.SHIFT_LOCKED, actions.layout)
     }
 
+    @Test
+    fun capsLockTurnsOffOnSingleShiftTap() {
+        load()
+
+        // Enable caps lock the way long-pressing shift does (a CAPS_LOCK key event).
+        tap(KeyCode.CAPS_LOCK)
+        assertEquals(Layout.SHIFT_LOCKED, actions.layout)
+
+        // A deliberate (post-timeout) single tap turns it back off.
+        tap(KeyCode.SHIFT)
+        assertEquals(Layout.ALPHABET, actions.layout)
+    }
+
+    @Test
+    fun capsLockTurnsOffOnQuickShiftTapWithinDoubleTapWindow() {
+        load()
+
+        tap(KeyCode.CAPS_LOCK)
+        assertEquals(Layout.SHIFT_LOCKED, actions.layout)
+
+        // A quick tap (still inside the double-tap window after enabling) must also turn it off,
+        // not be swallowed by double-tap detection.
+        actions.inDoubleTapTimeout = true
+        tap(KeyCode.SHIFT)
+        assertEquals(Layout.ALPHABET, actions.layout)
+    }
+
     private fun load() {
         state.onLoadKeyboard(Constants.TextUtils.CAP_MODE_OFF, null, false)
         actions.resetHistory()
@@ -139,7 +166,8 @@ class KeyboardStateTest {
         override fun setSymbolsShiftedKeyboard() {}
         override fun requestUpdatingShiftState(autoCapsFlags: Int, recapitalizeMode: RecapitalizeMode?) {}
         override fun startDoubleTapShiftKeyTimer() {}
-        override val isInDoubleTapShiftKeyTimeout = false
+        var inDoubleTapTimeout = false
+        override val isInDoubleTapShiftKeyTimeout get() = inDoubleTapTimeout
         override fun cancelDoubleTapShiftKeyTimer() {}
         override fun setOneHandedModeEnabled(enabled: Boolean) {}
         override fun switchOneHandedMode() {}
