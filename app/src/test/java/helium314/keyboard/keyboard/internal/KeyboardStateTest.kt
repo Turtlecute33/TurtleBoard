@@ -79,6 +79,23 @@ class KeyboardStateTest {
     }
 
     @Test
+    fun capsLockViaLongPressTurnsOffOnNextTap() {
+        load()
+
+        // Mirror PointerTracker.onLongPressed for a no-panel-auto-popup key: the shift touch-down runs
+        // a normal shift press, then the long-press dispatches the CAPS_LOCK popup and cancels shift
+        // tracking, so the shift key never receives its own release (it stays PRESSING).
+        state.onPressKey(KeyCode.SHIFT, true, Constants.TextUtils.CAP_MODE_OFF, null)
+        state.onPressKey(KeyCode.CAPS_LOCK, true, Constants.TextUtils.CAP_MODE_OFF, null)
+        state.onEvent(Event.createSoftwareKeypressEvent(KeyCode.CAPS_LOCK, 0, 0, 0, false), Constants.TextUtils.CAP_MODE_OFF, null)
+        state.onReleaseKey(KeyCode.CAPS_LOCK, false, Constants.TextUtils.CAP_MODE_OFF, null)
+        assertEquals(Layout.SHIFT_LOCKED, actions.layout)
+
+        tap(KeyCode.SHIFT)
+        assertEquals(Layout.ALPHABET, actions.layout)
+    }
+
+    @Test
     fun capsLockTurnsOffOnSingleShiftTap() {
         load()
 
