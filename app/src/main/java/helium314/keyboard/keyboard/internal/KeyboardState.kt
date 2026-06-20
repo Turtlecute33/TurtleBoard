@@ -670,6 +670,7 @@ class KeyboardState(private val switchActions: SwitchActions) {
 
         if (Constants.isLetterCode(code)) {
             if (oneShotManualShiftPending
+                && shiftKeyState.isReleasing
                 && mode == Mode.ALPHABET
                 && alphabetShiftState.isManualShifted
                 && !alphabetShiftState.isShiftLocked

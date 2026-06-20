@@ -67,6 +67,25 @@ class KeyboardStateTest {
     }
 
     @Test
+    fun shiftChordingKeepsShiftWhileHeld() {
+        load()
+
+        // Press and hold shift, then type letters without releasing it (chording).
+        state.onPressKey(KeyCode.SHIFT, true, Constants.TextUtils.CAP_MODE_OFF, null)
+        assertEquals(Layout.MANUAL_SHIFTED, actions.layout)
+
+        chordLetter('H')
+        assertEquals(Layout.MANUAL_SHIFTED, actions.layout)
+        chordLetter('I')
+        assertEquals(Layout.MANUAL_SHIFTED, actions.layout)
+
+        // Releasing shift after chording returns to the base layout.
+        state.onReleaseKey(KeyCode.SHIFT, false, Constants.TextUtils.CAP_MODE_OFF, null)
+        assertEquals(Layout.ALPHABET, actions.layout)
+        assertFalse(actions.everShiftLocked)
+    }
+
+    @Test
     fun capsLockRemainsLockedAfterTypingLetter() {
         load()
 
@@ -97,6 +116,13 @@ class KeyboardStateTest {
         state.onPressKey(letter.code, true, autoCapsFlags, null)
         state.onEvent(Event.createEventForCodePointFromUnknownSource(letter.code), autoCapsFlags, null)
         state.onReleaseKey(letter.code, false, autoCapsFlags, null)
+    }
+
+    // Types a letter as part of a multi-touch chord (shift held), so the shift key transitions to CHORDING.
+    private fun chordLetter(letter: Char) {
+        state.onPressKey(letter.code, false, Constants.TextUtils.CAP_MODE_OFF, null)
+        state.onEvent(Event.createEventForCodePointFromUnknownSource(letter.code), Constants.TextUtils.CAP_MODE_OFF, null)
+        state.onReleaseKey(letter.code, false, Constants.TextUtils.CAP_MODE_OFF, null)
     }
 
     private class FakeSwitchActions : KeyboardState.SwitchActions {

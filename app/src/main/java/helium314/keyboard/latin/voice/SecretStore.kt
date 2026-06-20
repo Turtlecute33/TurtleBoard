@@ -40,7 +40,10 @@ object SecretStore {
             // and scrub the original.
             val legacy = context.prefs().getString(prefKey, null)
             if (!legacy.isNullOrBlank()) {
-                secure.edit { putString(prefKey, legacy) }
+                // Commit the secure copy to disk before scrubbing the plaintext one. If the process
+                // dies in between, the worst case is a leftover plaintext key that gets re-scrubbed on
+                // the next read — never a lost key.
+                secure.edit(commit = true) { putString(prefKey, legacy) }
                 context.prefs().edit { remove(prefKey) }
                 return legacy
             }
@@ -52,8 +55,8 @@ object SecretStore {
     fun setApiKey(context: Context, prefKey: String, value: String) {
         val secure = securePrefs(context)
         if (secure != null) {
-            secure.edit { putString(prefKey, value) }
-            // Ensure no stale plaintext copy remains.
+            secure.edit(commit = true) { putString(prefKey, value) }
+            // Ensure no stale plaintext copy remains (only scrub once the secure write is persisted).
             context.prefs().edit { remove(prefKey) }
         } else {
             throw IllegalStateException("Secure storage unavailable")

@@ -20,6 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
@@ -62,8 +63,9 @@ class AudioRecorder(
 
     private var audioRecord: AudioRecord? = null
     private val recordingScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var recordingJob: Job? = null
-    private var pcmOutputFile: RandomAccessFile? = null
+    // Written on the IO recording thread, read on the main thread in cancel()/finalize — keep visible.
+    @Volatile private var recordingJob: Job? = null
+    @Volatile private var pcmOutputFile: RandomAccessFile? = null
     @Volatile private var pcmBytesWritten: Long = 0L
     @Volatile private var amplitudeSum: Long = 0L
     @Volatile private var amplitudeCount: Long = 0L
@@ -264,6 +266,16 @@ class AudioRecorder(
             if (outputFile.exists()) outputFile.delete()
             resetCounters()
         }
+    }
+
+    /**
+     * Permanently tears down this recorder's coroutine scope. Call when the recorder is being
+     * discarded (a new one is allocated per session) so its scope/job don't outlive it. After this
+     * the instance can't record again.
+     */
+    fun release() {
+        cancel()
+        recordingScope.cancel()
     }
 
     private fun dispatchAudioRecordStopAsync() {

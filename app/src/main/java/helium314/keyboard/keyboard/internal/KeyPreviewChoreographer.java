@@ -14,7 +14,6 @@ import android.view.animation.OvershootInterpolator;
 
 import helium314.keyboard.keyboard.Key;
 import helium314.keyboard.latin.common.ColorType;
-import helium314.keyboard.latin.common.Colors;
 import helium314.keyboard.latin.common.CoordinateUtils;
 import helium314.keyboard.latin.settings.Settings;
 import helium314.keyboard.latin.utils.ViewLayoutUtils;
@@ -121,8 +120,11 @@ public final class KeyPreviewChoreographer {
         }
         final boolean hasPopupKeys = (key.getPopupKeys() != null);
         keyPreviewView.setPreviewBackground(hasPopupKeys, keyPreviewPosition);
-        final Colors colors = Settings.getValues().mColors;
-        colors.setBackground(keyPreviewView, ColorType.KEY_PREVIEW_BACKGROUND);
+        final var settingsValues = Settings.getValues();
+        if (settingsValues != null) {
+            // too early in startup to resolve the theme color; placement below still proceeds
+            settingsValues.mColors.setBackground(keyPreviewView, ColorType.KEY_PREVIEW_BACKGROUND);
+        }
 
         // The key preview is placed vertically above the top edge of the parent key with an
         // arbitrary offset.

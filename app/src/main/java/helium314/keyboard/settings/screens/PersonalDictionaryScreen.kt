@@ -340,20 +340,12 @@ private const val DELETE_SELECTION_WITH_SHORTCUT_AND_WITH_ALL_LOCALES = (UserDic
         + UserDictionary.Words.LOCALE + " is null")
 
 private const val DELETE_SELECTION_WITHOUT_SHORTCUT_AND_WITH_LOCALE = (UserDictionary.Words.WORD + "=? AND "
-        + UserDictionary.Words.SHORTCUT + " is null AND "
-        + UserDictionary.Words.FREQUENCY + "=? AND "
-        + UserDictionary.Words.LOCALE + "=? OR "
-
-        + UserDictionary.Words.SHORTCUT + "='' AND "
+        + "(" + UserDictionary.Words.SHORTCUT + " is null OR " + UserDictionary.Words.SHORTCUT + "='') AND "
         + UserDictionary.Words.FREQUENCY + "=? AND "
         + UserDictionary.Words.LOCALE + "=?")
 
 private const val DELETE_SELECTION_WITHOUT_SHORTCUT_AND_WITH_ALL_LOCALES = (UserDictionary.Words.WORD + "=? AND "
-        + UserDictionary.Words.SHORTCUT + " is null AND "
-        + UserDictionary.Words.FREQUENCY + "=? AND "
-        + UserDictionary.Words.LOCALE + " is null OR "
-
-        + UserDictionary.Words.SHORTCUT + "='' AND "
+        + "(" + UserDictionary.Words.SHORTCUT + " is null OR " + UserDictionary.Words.SHORTCUT + "='') AND "
         + UserDictionary.Words.FREQUENCY + "=? AND "
         + UserDictionary.Words.LOCALE + " is null")
 

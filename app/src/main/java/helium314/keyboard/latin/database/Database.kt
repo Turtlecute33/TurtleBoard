@@ -51,10 +51,12 @@ class Database private constructor(context: Context, name: String = NAME) : SQLi
                     }
             }
             val db = getInstance(context)
-            db.writableDatabase.execSQL("DELETE FROM GESTURE_DATA")
             otherDb.readableDatabase.rawQuery("SELECT TIMESTAMP, WORD, EXPORTED, SOURCE_ACTIVE, DATA FROM GESTURE_DATA", null)
                 .use { c ->
                     db.writableDatabase.transaction {
+                        // Wipe inside the transaction so a failed insert rolls back the delete too,
+                        // instead of leaving the destination emptied with no replacement data.
+                        execSQL("DELETE FROM GESTURE_DATA")
                         while (c.moveToNext()) {
                             val cv = ContentValues(5)
                             cv.put("TIMESTAMP", c.getLong(0))

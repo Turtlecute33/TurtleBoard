@@ -41,6 +41,9 @@ class VoiceInputManager(
         private const val AUDIO_CACHE_SUBDIR = "voice_audio"
         private const val MIN_RECORDING_DURATION_MS = 500L
         private const val MIN_SPEECH_MEAN_AMPLITUDE = 80.0
+        // Only sweep recordings old enough that they cannot belong to an in-flight session — a
+        // rapid stop→record could otherwise delete the previous recording's file mid-finalize.
+        private const val ORPHAN_RECORDING_MAX_AGE_MS = 60_000L
     }
 
     enum class State { IDLE, RECORDING, TRANSCRIBING }
@@ -145,6 +148,9 @@ class VoiceInputManager(
         sweepOrphanRecordings()
         val audioFile = File(cacheAudioDir(), "rec_${System.currentTimeMillis()}.wav")
         currentAudioFile = audioFile
+        // Tear down the previous recorder (including the placeholder created at construction) so its
+        // coroutine scope doesn't leak for the lifetime of the IME process.
+        audioRecorder.release()
         audioRecorder = AudioRecorder(
             outputFile = audioFile,
             maxDurationMs = maxDurationSec * 1000L,
@@ -408,6 +414,7 @@ class VoiceInputManager(
     /** Cancel any in-flight work and tear down the background scope. Call from IME onDestroy. */
     fun release() {
         cancelRecording()
+        audioRecorder.release()
         backgroundScope.cancel()
     }
 
@@ -419,8 +426,11 @@ class VoiceInputManager(
 
     private fun sweepOrphanRecordings() {
         runCatching {
+            val cutoff = System.currentTimeMillis() - ORPHAN_RECORDING_MAX_AGE_MS
             cacheAudioDir().listFiles()?.forEach { file ->
-                if (file.name.startsWith("rec_") && file.extension.equals("wav", ignoreCase = true)) {
+                if (file.name.startsWith("rec_") && file.extension.equals("wav", ignoreCase = true)
+                    && file.lastModified() < cutoff
+                ) {
                     file.delete()
                 }
             }

@@ -160,9 +160,10 @@ class OpenRouterClient(
             } catch (e: InterruptedIOException) {
                 throw InterruptedException()
             } catch (e: java.io.IOException) {
-                // Never propagate the underlying IOException's message — on some Android stacks
-                // it includes the full request URL plus headers (Authorization: Bearer …). Swap
-                // it for a constant; the cause chain remains intact for debug logging.
+                // Never propagate the underlying IOException — on some Android stacks its message
+                // includes the full request URL plus headers (Authorization: Bearer …). We throw a
+                // bare OpenRouterException with no cause attached on purpose; do NOT pass `cause = e`
+                // here, or a logged stack trace could leak the API key.
                 if (attempt == MAX_ATTEMPTS - 1) throw OpenRouterException("Network error")
                 lastError = e
                 nextDelayOverrideMs = -1L
