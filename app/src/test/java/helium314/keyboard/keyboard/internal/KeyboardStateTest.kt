@@ -96,6 +96,22 @@ class KeyboardStateTest {
     }
 
     @Test
+    fun capsLockTurnsOffOnShiftPressEvenWhenReleaseIsDropped() {
+        load()
+
+        // Enable caps lock the way long-pressing shift does (a CAPS_LOCK key event).
+        tap(KeyCode.CAPS_LOCK)
+        assertEquals(Layout.SHIFT_LOCKED, actions.layout)
+
+        // On a real device, pressing Shift while shift-locked moves to shift-lock-shifted, which
+        // changes the keyboard layout and cancels the pointer tracker -- so the Shift release event
+        // is dropped and onReleaseKey(SHIFT) never arrives (confirmed via logcat). The turn-off must
+        // therefore happen on the press alone, with no release to follow.
+        state.onPressKey(KeyCode.SHIFT, true, Constants.TextUtils.CAP_MODE_OFF, null)
+        assertEquals(Layout.ALPHABET, actions.layout)
+    }
+
+    @Test
     fun capsLockTurnsOffOnSingleShiftTap() {
         load()
 
@@ -119,6 +135,52 @@ class KeyboardStateTest {
         // not be swallowed by double-tap detection.
         actions.inDoubleTapTimeout = true
         tap(KeyCode.SHIFT)
+        assertEquals(Layout.ALPHABET, actions.layout)
+    }
+
+    @Test
+    fun capsLockTurnsOffWhenShiftUpdateFiresDuringCodeInputWithAutoCaps() {
+        load()
+
+        // Enable caps lock the way long-pressing shift does (a CAPS_LOCK key event).
+        tap(KeyCode.CAPS_LOCK)
+        assertEquals(Layout.SHIFT_LOCKED, actions.layout)
+
+        // Real KeyboardSwitcher.requestUpdatingShiftState synchronously re-enters
+        // KeyboardState.onUpdateShiftState. InputLogic fires SHIFT_UPDATE_NOW during
+        // onCodeInput(SHIFT) -- i.e. AFTER onEvent(SHIFT) but BEFORE onReleaseKey(SHIFT).
+        // Reproduce that ordering here, with auto-caps wanting characters (harshest case).
+        state.onPressKey(KeyCode.SHIFT, true, TextUtils.CAP_MODE_CHARACTERS, null)
+        state.onEvent(Event.createSoftwareKeypressEvent(KeyCode.SHIFT, 0, 0, 0, false),
+            TextUtils.CAP_MODE_CHARACTERS, null)
+        state.onUpdateShiftState(TextUtils.CAP_MODE_CHARACTERS, null)
+        state.onReleaseKey(KeyCode.SHIFT, false, TextUtils.CAP_MODE_CHARACTERS, null)
+
+        assertEquals(Layout.ALPHABET, actions.layout)
+    }
+
+    @Test
+    fun capsLockViaLongPressTurnsOffWhenShiftUpdateFiresDuringCodeInputWithAutoCaps() {
+        load()
+
+        // Mirror PointerTracker.onLongPressed for a no-panel-auto-popup key: the shift touch-down
+        // runs a normal shift press, then the long-press dispatches the CAPS_LOCK popup and cancels
+        // shift tracking, so the shift key never receives its own release (it stays PRESSING).
+        state.onPressKey(KeyCode.SHIFT, true, Constants.TextUtils.CAP_MODE_OFF, null)
+        state.onPressKey(KeyCode.CAPS_LOCK, true, Constants.TextUtils.CAP_MODE_OFF, null)
+        state.onEvent(Event.createSoftwareKeypressEvent(KeyCode.CAPS_LOCK, 0, 0, 0, false),
+            Constants.TextUtils.CAP_MODE_OFF, null)
+        state.onReleaseKey(KeyCode.CAPS_LOCK, false, Constants.TextUtils.CAP_MODE_OFF, null)
+        assertEquals(Layout.SHIFT_LOCKED, actions.layout)
+
+        // Turn-off tap, but with the real InputLogic-driven shift update firing between
+        // onCodeInput(SHIFT) and onReleaseKey(SHIFT), and auto-caps wanting uppercase.
+        state.onPressKey(KeyCode.SHIFT, true, TextUtils.CAP_MODE_CHARACTERS, null)
+        state.onEvent(Event.createSoftwareKeypressEvent(KeyCode.SHIFT, 0, 0, 0, false),
+            TextUtils.CAP_MODE_CHARACTERS, null)
+        state.onUpdateShiftState(TextUtils.CAP_MODE_CHARACTERS, null)
+        state.onReleaseKey(KeyCode.SHIFT, false, TextUtils.CAP_MODE_CHARACTERS, null)
+
         assertEquals(Layout.ALPHABET, actions.layout)
     }
 
