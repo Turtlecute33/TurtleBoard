@@ -12,11 +12,13 @@ import java.text.BreakIterator
 import java.util.Locale
 
 private val SANITIZE_OUTPUT_REGEX =
-    Regex("[\\p{Cc}\\u200B\\u200C\\u200E\\u200F\\u202A-\\u202E\\u2066-\\u2069\\uFEFF]")
+    Regex("[[\\p{Cc}&&[^\\n\\r\\t]]\\u200B\\u200C\\u200E\\u200F\\u202A-\\u202E\\u2066-\\u2069\\uFEFF]")
 
 /**
  * Strip control characters (Cc) and a narrow set of bidi/format marks that corrupt host editors,
- * but intentionally preserve U+200D (ZWJ) so emoji sequences survive.
+ * but intentionally preserve U+200D (ZWJ) so emoji sequences survive, and newline/carriage-return/tab
+ * so the model's requested line breaks and spacing survive (otherwise "end.\nNext" collapses to
+ * "end.Next", losing both the line break and the space after punctuation).
  */
 internal fun sanitizeModelOutput(raw: String, maxLength: Int): String {
     val cleaned = raw.replace(SANITIZE_OUTPUT_REGEX, "").trim()

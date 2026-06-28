@@ -25,6 +25,26 @@ class SanitizeModelOutputTest {
     }
 
     @Test
+    fun newlinesArePreserved() {
+        // The model formats with line breaks; stripping them would collapse "end.\nNext" to
+        // "end.Next", losing both the line break and the space after the period.
+        val input = "First line.\nSecond line.\n\nNew paragraph."
+        assertEquals(input, sanitizeModelOutput(input, 100))
+    }
+
+    @Test
+    fun carriageReturnsAndTabsArePreserved() {
+        val input = "line one\r\n\tindented"
+        assertEquals(input, sanitizeModelOutput(input, 100))
+    }
+
+    @Test
+    fun newlinesSurviveAlongsideStrippedControlChars() {
+        val input = "a\u0000b\ncde"
+        assertEquals("ab\ncde", sanitizeModelOutput(input, 100))
+    }
+
+    @Test
     fun zwjIsPreservedSoEmojiFamilySurvives() {
         // U+1F468 U+200D U+1F469 U+200D U+1F466 -> man + woman + boy family emoji
         val family = "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC66"

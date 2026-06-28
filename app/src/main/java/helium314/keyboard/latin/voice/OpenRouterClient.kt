@@ -255,7 +255,12 @@ class OpenRouterClient(
         val textContent = JSONObject().apply {
             put("type", "text")
             put("text", systemPrompt)
-            if (provider == AiProvider.OPENROUTER && ModelCatalog.openRouterSupportsCache(model)) {
+            // Attach a prompt-cache breakpoint on the (stable) system prompt for every OpenRouter
+            // request. Providers that need an explicit breakpoint (Anthropic, legacy Gemini) get
+            // one; providers that cache implicitly (OpenAI, Gemini 2.5+, Grok, DeepSeek) ignore it
+            // harmlessly. Caching only actually engages once the cached prefix clears the provider's
+            // minimum-token floor (~1K for Gemini Flash), so short prompts still won't cache.
+            if (provider == AiProvider.OPENROUTER) {
                 put("cache_control", JSONObject().apply { put("type", "ephemeral") })
             }
         }
