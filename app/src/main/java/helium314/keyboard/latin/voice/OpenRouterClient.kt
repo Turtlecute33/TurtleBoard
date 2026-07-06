@@ -53,9 +53,9 @@ class OpenRouterClient(
         /** Template: call [modelEndpointUrl] to fill in the model id safely. */
         fun modelEndpointUrl(author: String, slug: String): String = "$API_BASE/models/$author/$slug/endpoints"
         private const val STABLE_AUDIO_INSTRUCTION = "Process the attached audio input according to the system instructions. Return only the final answer."
-        private const val APP_REFERER = "https://github.com/anomalyco/Turtleboard"
-        private const val APP_TITLE = "Turtleboard"
-        private const val APP_CATEGORIES = "programming-app"
+        private const val APP_REFERER = "https://github.com/Turtlecute33/WisprBoard"
+        private const val APP_TITLE = "WisprBoard"
+        private const val APP_CATEGORIES = "writing-assistant"
         const val DEFAULT_CONNECT_TIMEOUT_MS = 15_000
         const val DEFAULT_READ_TIMEOUT_MS = 90_000
         private const val MAX_ATTEMPTS = 3
