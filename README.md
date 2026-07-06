@@ -114,6 +114,8 @@ WisprBoard stands on the shoulders of giants:
 
 [GPL v3](/LICENSE). AOSP-derived portions are also available under [Apache 2.0](LICENSE-Apache-2.0).
 
+Bundled dictionaries come from [Helium314/aosp-dictionaries](https://codeberg.org/Helium314/aosp-dictionaries); the expanded English and Italian word lists are built from sources licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
 <div align="center">
 <br>
 <sub>Code changes are AI-assisted but human-reviewed and tested before release; product and architecture decisions are mine. Even with Zero Data Retention, always minimize sensitive data disclosure to 3rd parties.</sub>

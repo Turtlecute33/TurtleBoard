@@ -557,7 +557,7 @@ private object AppUpgrade {
             }
         }
         if (oldVersion <= 3001 && prefs.getInt(Settings.PREF_CLIPBOARD_HISTORY_RETENTION_TIME, Defaults.PREF_CLIPBOARD_HISTORY_RETENTION_TIME) <= 0) {
-            prefs.edit { putInt(Settings.PREF_CLIPBOARD_HISTORY_RETENTION_TIME, 121) }
+            prefs.edit { putInt(Settings.PREF_CLIPBOARD_HISTORY_RETENTION_TIME, Settings.CLIPBOARD_RETENTION_NO_LIMIT_MINUTES) }
         }
         if (oldVersion <= 3002) {
             prefs.all.filterKeys { it.startsWith(Settings.PREF_USER_ALL_COLORS_PREFIX) }.forEach {
@@ -623,6 +623,12 @@ private object AppUpgrade {
                 putBoolean(Settings.PREF_SUGGEST_PUNCTUATION,
                     !prefs.getBoolean(Settings.PREF_BIGRAM_PREDICTIONS, Defaults.PREF_BIGRAM_PREDICTIONS))
             }
+        }
+        // 6.6.4 (6640) moved the clipboard "No limit" sentinel from 121 (old slider max) to 1441
+        // without remapping, so "No limit" users were silently switched to 121-minute retention.
+        // Remap for upgrades from before 6.6.4 and heal users who already passed through 6.6.4-6.6.6.
+        if (oldVersion <= 6660 && prefs.getInt(Settings.PREF_CLIPBOARD_HISTORY_RETENTION_TIME, Defaults.PREF_CLIPBOARD_HISTORY_RETENTION_TIME) == 121) {
+            prefs.edit { putInt(Settings.PREF_CLIPBOARD_HISTORY_RETENTION_TIME, Settings.CLIPBOARD_RETENTION_NO_LIMIT_MINUTES) }
         }
         upgradeToolbarPrefs(prefs)
         LayoutUtilsCustom.onLayoutFileChanged() // just to be sure

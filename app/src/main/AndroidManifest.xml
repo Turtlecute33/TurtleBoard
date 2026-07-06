@@ -102,7 +102,7 @@ SPDX-License-Identifier: Apache-2.0 AND GPL-3.0-only
 
         <!-- Broadcast receivers -->
         <receiver android:name="SystemBroadcastReceiver"
-                android:exported="true">
+                android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

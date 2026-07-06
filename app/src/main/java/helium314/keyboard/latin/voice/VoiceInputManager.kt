@@ -41,6 +41,9 @@ class VoiceInputManager(
         private const val AUDIO_CACHE_SUBDIR = "voice_audio"
         private const val MIN_RECORDING_DURATION_MS = 500L
         private const val MIN_SPEECH_MEAN_AMPLITUDE = 80.0
+        // Only sweep recordings old enough that they cannot belong to an in-flight session — a
+        // rapid stop→record could otherwise delete the previous recording's file mid-finalize.
+        private const val ORPHAN_RECORDING_MAX_AGE_MS = 60_000L
     }
 
     enum class State { IDLE, RECORDING, TRANSCRIBING }
@@ -83,6 +86,13 @@ class VoiceInputManager(
 
     /** Exposed so UI can render an elapsed-time counter. */
     fun getCurrentDurationMs(): Long = audioRecorder.currentDurationMs
+
+    /** Maps the mic-sensitivity preference to a linear capture gain. "normal" leaves audio untouched. */
+    private fun micSensitivityGain(value: String?): Float = when (value) {
+        "high" -> 2f
+        "max" -> 4f
+        else -> 1f
+    }
 
     @Synchronized
     fun startRecording(useDedicatedStt: Boolean = false) {
@@ -129,16 +139,23 @@ class VoiceInputManager(
         val autoStopEnabled = prefs.getBoolean(Settings.PREF_VOICE_AUTO_STOP_SILENCE, Defaults.PREF_VOICE_AUTO_STOP_SILENCE)
         val autoStopSec = prefs.getInt(Settings.PREF_VOICE_AUTO_STOP_SILENCE_SECONDS, Defaults.PREF_VOICE_AUTO_STOP_SILENCE_SECONDS)
             .coerceIn(1, 10)
+        val micGain = micSensitivityGain(
+            prefs.getString(Settings.PREF_VOICE_MIC_SENSITIVITY, Defaults.PREF_VOICE_MIC_SENSITIVITY)
+        )
 
         // Fresh cache file per recording; older ones are swept on every start so a process
         // killed mid-recording can't leak audio across sessions.
         sweepOrphanRecordings()
         val audioFile = File(cacheAudioDir(), "rec_${System.currentTimeMillis()}.wav")
         currentAudioFile = audioFile
+        // Tear down the previous recorder (including the placeholder created at construction) so its
+        // coroutine scope doesn't leak for the lifetime of the IME process.
+        audioRecorder.release()
         audioRecorder = AudioRecorder(
             outputFile = audioFile,
             maxDurationMs = maxDurationSec * 1000L,
             autoStopSilenceMs = if (autoStopEnabled) autoStopSec * 1000L else 0L,
+            inputGain = micGain,
         )
         audioRecorder.onMaxDurationReached = {
             mainHandler.post {
@@ -397,6 +414,7 @@ class VoiceInputManager(
     /** Cancel any in-flight work and tear down the background scope. Call from IME onDestroy. */
     fun release() {
         cancelRecording()
+        audioRecorder.release()
         backgroundScope.cancel()
     }
 
@@ -408,8 +426,11 @@ class VoiceInputManager(
 
     private fun sweepOrphanRecordings() {
         runCatching {
+            val cutoff = System.currentTimeMillis() - ORPHAN_RECORDING_MAX_AGE_MS
             cacheAudioDir().listFiles()?.forEach { file ->
-                if (file.name.startsWith("rec_") && file.extension.equals("wav", ignoreCase = true)) {
+                if (file.name.startsWith("rec_") && file.extension.equals("wav", ignoreCase = true)
+                    && file.lastModified() < cutoff
+                ) {
                     file.delete()
                 }
             }

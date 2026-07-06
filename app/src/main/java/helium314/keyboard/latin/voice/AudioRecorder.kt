@@ -20,6 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
@@ -43,6 +44,12 @@ class AudioRecorder(
     private val maxDurationMs: Long = 90_000L,
     /** If >0, stop after this many contiguous ms of silence once the user has spoken at least once. */
     private val autoStopSilenceMs: Long = 0L,
+    /**
+     * Linear gain applied to every captured sample before it is measured and written. 1f is a
+     * no-op; values >1 boost quiet microphones (some OEM devices capture well below line level,
+     * so normal speech would otherwise fall under the silence gate). Clipped to 16-bit range.
+     */
+    private val inputGain: Float = 1f,
 ) {
 
     companion object {
@@ -56,8 +63,9 @@ class AudioRecorder(
 
     private var audioRecord: AudioRecord? = null
     private val recordingScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var recordingJob: Job? = null
-    private var pcmOutputFile: RandomAccessFile? = null
+    // Written on the IO recording thread, read on the main thread in cancel()/finalize — keep visible.
+    @Volatile private var recordingJob: Job? = null
+    @Volatile private var pcmOutputFile: RandomAccessFile? = null
     @Volatile private var pcmBytesWritten: Long = 0L
     @Volatile private var amplitudeSum: Long = 0L
     @Volatile private var amplitudeCount: Long = 0L
@@ -182,6 +190,7 @@ class AudioRecorder(
             val read = audioRecord?.read(buffer, 0, buffer.size) ?: AudioRecord.ERROR_INVALID_OPERATION
             when {
                 read > 0 -> {
+                    if (inputGain != 1f) applyGain(buffer, read, inputGain)
                     try {
                         pcmOutputFile?.write(buffer, 0, read)
                         pcmBytesWritten += read
@@ -257,6 +266,16 @@ class AudioRecorder(
             if (outputFile.exists()) outputFile.delete()
             resetCounters()
         }
+    }
+
+    /**
+     * Permanently tears down this recorder's coroutine scope. Call when the recorder is being
+     * discarded (a new one is allocated per session) so its scope/job don't outlive it. After this
+     * the instance can't record again.
+     */
+    fun release() {
+        cancel()
+        recordingScope.cancel()
     }
 
     private fun dispatchAudioRecordStopAsync() {
@@ -364,6 +383,21 @@ class AudioRecorder(
         try { agc?.release() } catch (_: Throwable) {}
         noiseSuppressor = null
         agc = null
+    }
+
+    /** Scales each 16-bit little-endian sample in place by [gain], clipping to the PCM16 range. */
+    private fun applyGain(buf: ByteArray, length: Int, gain: Float) {
+        var i = 0
+        val end = length - 1
+        while (i < end) {
+            val lo = buf[i].toInt() and 0xff
+            val hi = buf[i + 1].toInt()
+            val sample = ((hi shl 8) or lo).toShort().toInt()
+            val boosted = (sample * gain).toInt().coerceIn(-32768, 32767)
+            buf[i] = (boosted and 0xff).toByte()
+            buf[i + 1] = ((boosted shr 8) and 0xff).toByte()
+            i += 2
+        }
     }
 
     private fun chunkMeanAmplitude(buf: ByteArray, length: Int): Double {

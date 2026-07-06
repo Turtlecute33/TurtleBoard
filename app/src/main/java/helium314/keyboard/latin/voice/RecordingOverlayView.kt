@@ -17,6 +17,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import helium314.keyboard.latin.R
+import kotlin.reflect.KMutableProperty0
 
 /**
  * Recording indicator with live amplitude meter, elapsed time, cancel, and stop button.
@@ -31,7 +32,10 @@ class RecordingOverlayView(context: Context) : LinearLayout(context) {
     private val stopButton: ImageView
     private val tickHandler = Handler(Looper.getMainLooper())
     private var tickRunnable: Runnable? = null
-    private var lastClickMs = 0L
+    // Per-button debounce: Stop and Cancel must not share a window, or tapping Stop then Cancel in
+    // quick succession would silently swallow the Cancel.
+    private var lastStopClickMs = 0L
+    private var lastCancelClickMs = 0L
 
     var onStopClick: (() -> Unit)? = null
     var onCancelClick: (() -> Unit)? = null
@@ -59,10 +63,10 @@ class RecordingOverlayView(context: Context) : LinearLayout(context) {
             layoutParams = LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f)
         }
         cancelButton = makeRoundButton(isCancel = true, descRes = R.string.voice_cancel) {
-            debounceClick { onCancelClick?.invoke() }
+            debounceClick(::lastCancelClickMs) { onCancelClick?.invoke() }
         }
         stopButton = makeRoundButton(isCancel = false, descRes = R.string.voice_stop_recording) {
-            debounceClick { onStopClick?.invoke() }
+            debounceClick(::lastStopClickMs) { onStopClick?.invoke() }
         }
 
         addView(meterView)
@@ -158,12 +162,13 @@ class RecordingOverlayView(context: Context) : LinearLayout(context) {
         tickRunnable = null
     }
 
-    private inline fun debounceClick(action: () -> Unit) {
+    private fun debounceClick(lastClickMs: KMutableProperty0<Long>, action: () -> Unit) {
         // Stop/Cancel both have heavy side effects (stop the recorder, cancel an in-flight upload).
-        // A spammed double-tap can race the state machine — 300ms is plenty of breathing room.
+        // A spammed double-tap of the *same* button can race the state machine — 300ms is plenty of
+        // breathing room. The window is per-button so the two never block each other.
         val now = SystemClock.elapsedRealtime()
-        if (now - lastClickMs < 300L) return
-        lastClickMs = now
+        if (now - lastClickMs.get() < 300L) return
+        lastClickMs.set(now)
         action()
     }
 

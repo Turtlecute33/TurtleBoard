@@ -154,6 +154,7 @@ internal fun buildVoiceScreenItems(
     if (voiceInputEnabled) Settings.PREF_VOICE_LANGUAGE_HINT else null,
     if (voiceInputEnabled) Settings.PREF_VOICE_SPACE_HEURISTIC else null,
     if (voiceInputEnabled) Settings.PREF_VOICE_HAPTIC_FEEDBACK else null,
+    if (voiceInputEnabled) Settings.PREF_VOICE_MIC_SENSITIVITY else null,
     if (voiceInputEnabled) Settings.PREF_VOICE_MAX_DURATION_SECONDS else null,
     if (voiceInputEnabled) Settings.PREF_VOICE_AUTO_STOP_SILENCE else null,
     if (voiceInputEnabled && voiceAutoStop) Settings.PREF_VOICE_AUTO_STOP_SILENCE_SECONDS else null,
@@ -165,14 +166,21 @@ fun createVoiceSettings(context: Context) = listOf(
         val prefs = ctx.prefs()
         val permissionDeniedMessage = stringResource(R.string.voice_error_no_permission)
         val secureStorageMessage = stringResource(R.string.voice_error_secure_storage_unavailable)
-        val pendingPermissionResult = remember {
-            mutableStateOf<((Boolean) -> Unit)?>(null)
-        }
-        var showRationale by remember { mutableStateOf(false) }
-        var showPrivacyDialog by remember { mutableStateOf(false) }
+        // rememberSaveable so the in-progress enable flow survives a rotation mid-dialog.
+        var showRationale by rememberSaveable { mutableStateOf(false) }
+        var showPrivacyDialog by rememberSaveable { mutableStateOf(false) }
+        // Act on the grant result directly in the launcher callback. ActivityResult delivery survives
+        // a rotation that recreates the activity while the system permission dialog is up; a separately
+        // remembered callback lambda would be lost, silently dropping the enable.
         val permissionLauncher = rememberLauncherForActivityResult(
             ActivityResultContracts.RequestPermission()
-        ) { granted -> pendingPermissionResult.value?.invoke(granted) }
+        ) { granted ->
+            if (granted) {
+                prefs.edit { putBoolean(setting.key, true) }
+            } else {
+                Toast.makeText(ctx, permissionDeniedMessage, Toast.LENGTH_SHORT).show()
+            }
+        }
 
         fun enableAfterPrivacyConfirmation() {
             if (!SecretStore.isSecureStorageAvailable(ctx)) {
@@ -182,13 +190,6 @@ fun createVoiceSettings(context: Context) = listOf(
             if (PermissionsUtil.checkAllPermissionsGranted(ctx, Manifest.permission.RECORD_AUDIO)) {
                 prefs.edit { putBoolean(setting.key, true) }
                 return
-            }
-            pendingPermissionResult.value = { granted ->
-                if (granted) {
-                    prefs.edit { putBoolean(setting.key, true) }
-                } else {
-                    Toast.makeText(ctx, permissionDeniedMessage, Toast.LENGTH_SHORT).show()
-                }
             }
             showRationale = true
         }
@@ -208,7 +209,7 @@ fun createVoiceSettings(context: Context) = listOf(
 
         if (showRationale) {
             ConfirmationDialog(
-                onDismissRequest = { showRationale = false; pendingPermissionResult.value = null },
+                onDismissRequest = { showRationale = false },
                 onConfirmed = {
                     showRationale = false
                     permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
@@ -224,7 +225,6 @@ fun createVoiceSettings(context: Context) = listOf(
             Defaults.PREF_VOICE_INPUT_ENABLED,
             allowCheckedChange = { enabled ->
                 if (!enabled) {
-                    pendingPermissionResult.value = null
                     return@SwitchPreference true
                 }
                 if (!SecretStore.isSecureStorageAvailable(ctx)) {
@@ -432,6 +432,15 @@ fun createVoiceSettings(context: Context) = listOf(
         R.string.voice_polish_model_custom_summary,
     ) {
         TextInputPreference(it, Defaults.PREF_VOICE_POLISH_MODEL_CUSTOM, checkTextValid = ::isValidCustomModelSlug)
+    },
+    Setting(context, Settings.PREF_VOICE_MIC_SENSITIVITY, R.string.voice_mic_sensitivity, R.string.voice_mic_sensitivity_summary) { setting ->
+        val ctx = LocalContext.current
+        val items = listOf(
+            ctx.getString(R.string.voice_mic_sensitivity_normal) to "normal",
+            ctx.getString(R.string.voice_mic_sensitivity_high) to "high",
+            ctx.getString(R.string.voice_mic_sensitivity_max) to "max",
+        )
+        ListPreference(setting, items, Defaults.PREF_VOICE_MIC_SENSITIVITY)
     },
     Setting(context, Settings.PREF_VOICE_MAX_DURATION_SECONDS, R.string.voice_max_duration, R.string.voice_max_duration_summary) { setting ->
         SliderPreference(

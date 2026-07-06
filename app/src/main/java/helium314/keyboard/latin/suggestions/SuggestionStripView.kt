@@ -21,6 +21,7 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.View.OnLongClickListener
+import android.view.animation.DecelerateInterpolator
 import android.view.ViewGroup
 import android.view.accessibility.AccessibilityEvent
 import android.widget.ImageButton
@@ -264,6 +265,22 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         )
         isExternalSuggestionVisible = false
         updateKeys()
+        animateSuggestionsIn()
+    }
+
+    // Gentle, fast fade so refreshed suggestions ease in instead of hard-swapping on every keystroke.
+    // Kept short and subtle to stay smooth during fast typing.
+    private fun animateSuggestionsIn() {
+        if (!suggestionsStrip.isVisible) return // don't animate while the toolbar covers the strip
+        suggestionsStrip.animate().cancel()
+        suggestionsStrip.alpha = SUGGESTIONS_FADE_IN_START_ALPHA
+        suggestionsStrip.animate()
+            .alpha(1f)
+            .withLayer() // composite the strip once per frame instead of per child
+            .setDuration(SUGGESTIONS_FADE_IN_DURATION)
+            .setInterpolator(DecelerateInterpolator())
+            .withEndAction { suggestionsStrip.alpha = 1f } // a cancelled fade must not leave the strip translucent
+            .start()
     }
 
     fun setExternalSuggestionView(view: View?, addCloseButton: Boolean) {
@@ -403,6 +420,9 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         super.onDetachedFromWindow()
         dismissMoreSuggestionsPanel()
         viewScope.cancel()
+        // a fade cancelled by detaching must not leave the strip translucent on reattach
+        suggestionsStrip.animate().cancel()
+        suggestionsStrip.alpha = 1f
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -655,6 +675,8 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         @JvmField
         var DEBUG_SUGGESTIONS = false
         private const val DEBUG_INFO_TEXT_SIZE_IN_DIP = 6.5f
+        private const val SUGGESTIONS_FADE_IN_DURATION = 80L
+        private const val SUGGESTIONS_FADE_IN_START_ALPHA = 0.65f
         private val TAG = SuggestionStripView::class.java.simpleName
     }
 }

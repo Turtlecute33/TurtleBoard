@@ -640,11 +640,15 @@ public class LatinIME extends InputMethodService implements
 
             @Override
             public void onTranscriptionResult(@NonNull final String text) {
+                if (isVoiceHapticEnabled())
+                    AudioAndHapticFeedbackManager.getInstance().vibrateVoiceSuccess();
                 onTextInput(text);
             }
 
             @Override
             public void onError(@NonNull final String message) {
+                if (isVoiceHapticEnabled())
+                    AudioAndHapticFeedbackManager.getInstance().vibrateVoiceError();
                 Toast.makeText(LatinIME.this, message, Toast.LENGTH_LONG).show();
             }
 
@@ -938,6 +942,7 @@ public class LatinIME extends InputMethodService implements
         mStatsUtilsManager.onDestroy(this /* context */);
         super.onDestroy();
         mHandler.removeCallbacksAndMessages(null);
+        mTextFixOverlayHandler.removeCallbacksAndMessages(null);
         deallocateMemory();
     }
 
@@ -951,6 +956,10 @@ public class LatinIME extends InputMethodService implements
     public void onConfigurationChanged(final Configuration conf) {
         SettingsValues settingsValues = mSettings.getCurrent();
         Log.i(TAG, "onConfigurationChanged");
+        // The suggestion strip (and its text-fix overlay) is recreated on orientation change, so any
+        // in-flight text-fix request would resolve onto a stale strip and its result would be lost.
+        // Cancel it instead of leaving the user with a silently dropped Replace/Discard.
+        clearPendingTextFixState();
         SubtypeSettings.INSTANCE.reloadSystemLocales(this);
         if (settingsValues.mDisplayOrientation != conf.orientation) {
             mHandler.startOrientationChanging();
@@ -1241,6 +1250,7 @@ public class LatinIME extends InputMethodService implements
         mainKeyboardView.setMainDictionaryAvailability(mDictionaryFacilitator.hasAtLeastOneInitializedMainDictionary());
         mainKeyboardView.setKeyPreviewPopupEnabled(currentSettingsValues.mKeyPreviewPopupOn);
         mainKeyboardView.setSlidingKeyInputPreviewEnabled(currentSettingsValues.mSlidingKeyInputPreviewEnabled);
+        mainKeyboardView.setKeyPressRippleEnabled(currentSettingsValues.mKeyPressRippleEnabled);
         mainKeyboardView.setGestureHandlingEnabledByUser(
                 currentSettingsValues.mGestureInputEnabled,
                 currentSettingsValues.mGestureTrailEnabled,

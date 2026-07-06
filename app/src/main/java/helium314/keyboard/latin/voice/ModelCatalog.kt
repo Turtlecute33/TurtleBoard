@@ -4,16 +4,19 @@ package helium314.keyboard.latin.voice
 /**
  * Single source of truth for the models the keyboard offers in Voice / STT / Text-Fix
  * dropdowns. Each entry encodes the slug, display name, pricing tier, and whether the
- * model supports OpenRouter ZDR and prompt-cache routing. The same data drives:
+ * model supports OpenRouter ZDR routing and prompt caching. The same data drives:
  *
  *  - the dropdown labels and pills the user sees,
  *  - the slug allow-lists that survive provider-switch fallback in [AiProvider],
- *  - the per-request decision in OpenRouterClient about whether to enforce `zdr: true`
- *    and attach `cache_control` hints.
+ *  - the per-request decision in OpenRouterClient about whether to enforce `zdr: true`.
  *
- * Capability flags (`zdr`, `cache`) are verified against OpenRouter's
- * `/api/v1/endpoints/zdr` and per-model `/endpoints` responses — see the changelog
- * for the verification date. ZDR enforcement is best-effort: with the user toggle on,
+ * Note on caching: OpenRouterClient attaches a `cache_control` breakpoint to the system prompt
+ * of *every* OpenRouter chat request regardless of catalog membership (providers that need it
+ * use it; providers that cache implicitly ignore it). The `cache` flag therefore no longer
+ * gates the request — it only drives the verified-"CACHE" pill in the picker.
+ *
+ * The `zdr` flag is verified against OpenRouter's `/api/v1/endpoints/zdr` response — see the
+ * changelog for the verification date. ZDR enforcement is best-effort: with the user toggle on,
  * `provider.zdr: true` is emitted only for catalog models flagged `zdr = true`; other
  * models (including custom slugs) skip enforcement so the request still succeeds. The
  * missing ZDR pill in the picker is the user-visible signal that strict ZDR isn't in
@@ -58,10 +61,10 @@ internal object ModelCatalog {
     )
 
     // PayPerQ uses its own model namespace (api.ppq.ai/v1/models) and doesn't honor OpenRouter's
-    // ZDR, prompt-cache, or `:free` tier contracts, so capability flags are stripped and free
-    // OpenRouter slugs are swapped for their paid PayPerQ equivalents. Some OpenRouter slugs —
-    // notably `~author/...-latest` floating aliases — won't resolve on PayPerQ; users on those
-    // entries should fall back to Custom Model ID with a slug from PayPerQ's own model list.
+    // ZDR or `:free` tier contracts, so capability flags are stripped and free OpenRouter slugs
+    // are swapped for their paid PayPerQ equivalents. Some OpenRouter slugs — notably
+    // `~author/...-latest` floating aliases — won't resolve on PayPerQ; users on those entries
+    // should fall back to Custom Model ID with a slug from PayPerQ's own model list.
     val PAYPERQ_VOICE: List<ModelEntry> = OPENROUTER_VOICE.map { entry ->
         when (entry.slug) {
             "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free" -> entry.copy(
@@ -80,7 +83,4 @@ internal object ModelCatalog {
 
     fun openRouterSupportsZdr(slug: String): Boolean =
         ALL_OPENROUTER_BY_SLUG[slug]?.zdr == true
-
-    fun openRouterSupportsCache(slug: String): Boolean =
-        ALL_OPENROUTER_BY_SLUG[slug]?.cache == true
 }

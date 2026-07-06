@@ -2,6 +2,7 @@
 package helium314.keyboard.latin.database
 
 import android.content.Context
+import android.content.ContentValues
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import androidx.core.database.sqlite.transaction
@@ -50,13 +51,21 @@ class Database private constructor(context: Context, name: String = NAME) : SQLi
                     }
             }
             val db = getInstance(context)
-            db.writableDatabase.execSQL("DELETE FROM GESTURE_DATA")
             otherDb.readableDatabase.rawQuery("SELECT TIMESTAMP, WORD, EXPORTED, SOURCE_ACTIVE, DATA FROM GESTURE_DATA", null)
                 .use { c ->
                     db.writableDatabase.transaction {
+                        // Wipe inside the transaction so a failed insert rolls back the delete too,
+                        // instead of leaving the destination emptied with no replacement data.
+                        execSQL("DELETE FROM GESTURE_DATA")
                         while (c.moveToNext()) {
-                            execSQL("INSERT INTO GESTURE_DATA (TIMESTAMP, WORD, EXPORTED, SOURCE_ACTIVE, DATA) " +
-                                "VALUES (${c.getLong(0)},?,${c.getInt(2)},${c.getInt(3)},?)", arrayOf(c.getString(1), c.getString(4)))
+                            val cv = ContentValues(5)
+                            cv.put("TIMESTAMP", c.getLong(0))
+                            cv.put("WORD", c.getString(1))
+                            cv.put("EXPORTED", c.getInt(2))
+                            cv.put("SOURCE_ACTIVE", c.getInt(3))
+                            cv.put("DATA", c.getString(4))
+                            // throw on failure so the transaction rolls back instead of silently dropping rows
+                            insertOrThrow("GESTURE_DATA", null, cv)
                         }
                     }
                 }

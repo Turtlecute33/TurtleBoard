@@ -527,7 +527,11 @@ class KeyboardState(private val switchActions: SwitchActions) {
         }
         isInDoubleTapShiftKey = switchActions.isInDoubleTapShiftKeyTimeout
         if (isInDoubleTapShiftKey) {
-            if (alphabetShiftState.isManualShifted || isInAlphabetUnshiftedFromShifted) {
+            if (alphabetShiftState.isShiftLocked) {
+                // Caps lock is already on (e.g. just enabled via long-press). A quick tap should turn
+                // it back off rather than being swallowed by double-tap detection.
+                setShiftLocked(false)
+            } else if (alphabetShiftState.isManualShifted || isInAlphabetUnshiftedFromShifted) {
                 // Shift key has been double tapped while in manual shifted or automatic shifted state.
                 setShiftLocked(true)
             }
@@ -537,9 +541,13 @@ class KeyboardState(private val switchActions: SwitchActions) {
             // This is first tap.
             switchActions.startDoubleTapShiftKeyTimer()
             if (alphabetShiftState.isShiftLocked) {
-                // Shift key is pressed while shift locked state, we will treat this state as
-                // shift lock shifted state and mark as if shift key pressed while normal state.
-                setShifted(ShiftMode.SHIFT_LOCKED)
+                // A single tap while Caps Lock is on turns it off. This must happen on press, not
+                // on release: moving to shift-lock-shifted changes the keyboard layout, which
+                // cancels the pointer tracker and drops the Shift release event (reliably so right
+                // after enabling Caps Lock via long-press, where the Shift key is still left
+                // pressing). A release-based turn-off therefore never fires and Caps Lock stays
+                // stuck on. Acting on press makes a single tap disable Caps Lock at any tap speed.
+                setShiftLocked(false)
                 shiftKeyState.onPress()
             } else if (alphabetShiftState.isAutomaticShifted) {
                 // Shift key is pressed while automatic shifted, we have to move to manual shifted.

@@ -37,6 +37,7 @@ import helium314.keyboard.keyboard.internal.DrawingProxy;
 import helium314.keyboard.keyboard.internal.GestureFloatingTextDrawingPreview;
 import helium314.keyboard.keyboard.internal.GestureTrailsDrawingPreview;
 import helium314.keyboard.keyboard.internal.KeyDrawParams;
+import helium314.keyboard.keyboard.internal.KeyPressRippleDrawingPreview;
 import helium314.keyboard.keyboard.internal.KeyPreviewChoreographer;
 import helium314.keyboard.keyboard.internal.KeyPreviewDrawParams;
 import helium314.keyboard.keyboard.internal.KeyPreviewView;
@@ -101,6 +102,8 @@ public final class MainKeyboardView extends KeyboardView implements DrawingProxy
     private final GestureFloatingTextDrawingPreview mGestureFloatingTextDrawingPreview;
     private final GestureTrailsDrawingPreview mGestureTrailsDrawingPreview;
     private final SlidingKeyInputDrawingPreview mSlidingKeyInputDrawingPreview;
+    private final KeyPressRippleDrawingPreview mKeyPressRippleDrawingPreview;
+    private boolean mKeyPressRippleEnabled;
 
     // Key preview
     private final KeyPreviewDrawParams mKeyPreviewDrawParams;
@@ -205,6 +208,11 @@ public final class MainKeyboardView extends KeyboardView implements DrawingProxy
 
         mSlidingKeyInputDrawingPreview = new SlidingKeyInputDrawingPreview(mainKeyboardViewAttr);
         mSlidingKeyInputDrawingPreview.setDrawingView(drawingPreviewPlacerView);
+
+        mKeyPressRippleDrawingPreview = new KeyPressRippleDrawingPreview(getResources().getDisplayMetrics().density);
+        mKeyPressRippleDrawingPreview.setDrawingView(drawingPreviewPlacerView);
+        // Enabled state is driven by the user setting via setKeyPressRippleEnabled(), applied
+        // whenever a keyboard is set on this view (KeyboardSwitcher.setKeyboard).
         mainKeyboardViewAttr.recycle();
 
         mDrawingPreviewPlacerView = drawingPreviewPlacerView;
@@ -361,6 +369,17 @@ public final class MainKeyboardView extends KeyboardView implements DrawingProxy
         key.onPressed();
         invalidateKey(key);
 
+        // Spawn a subtle ripple at the key centre on the overlay (above the buffered keys).
+        // Only for the key the user actually touched (withPreview is false for sibling shift
+        // keys and altCodeWhileTyping keys), and only when the feature is enabled, so the
+        // hot path pays nothing otherwise.
+        if (withPreview && mKeyPressRippleEnabled) {
+            locatePreviewPlacerView();
+            mKeyPressRippleDrawingPreview.addRipple(
+                    key.getX() + key.getWidth() / 2f,
+                    key.getY() + key.getHeight() / 2f);
+        }
+
         final Keyboard keyboard = getKeyboard();
         if (keyboard == null) {
             return;
@@ -405,6 +424,11 @@ public final class MainKeyboardView extends KeyboardView implements DrawingProxy
 
     public void setSlidingKeyInputPreviewEnabled(final boolean enabled) {
         mSlidingKeyInputDrawingPreview.setPreviewEnabled(enabled);
+    }
+
+    public void setKeyPressRippleEnabled(final boolean enabled) {
+        mKeyPressRippleEnabled = enabled;
+        mKeyPressRippleDrawingPreview.setPreviewEnabled(enabled);
     }
 
     @Override

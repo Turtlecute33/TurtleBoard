@@ -8,7 +8,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -73,7 +73,7 @@ fun createTextFixSettings(context: Context) = listOf(
         val ctx = LocalContext.current
         val prefs = ctx.prefs()
         val secureStorageMessage = stringResource(R.string.voice_error_secure_storage_unavailable)
-        val showPrivacyDialog = remember { mutableStateOf(false) }
+        val showPrivacyDialog = rememberSaveable { mutableStateOf(false) }
         if (showPrivacyDialog.value) {
             ConfirmationDialog(
                 onDismissRequest = { showPrivacyDialog.value = false },

@@ -53,9 +53,9 @@ class OpenRouterClient(
         /** Template: call [modelEndpointUrl] to fill in the model id safely. */
         fun modelEndpointUrl(author: String, slug: String): String = "$API_BASE/models/$author/$slug/endpoints"
         private const val STABLE_AUDIO_INSTRUCTION = "Process the attached audio input according to the system instructions. Return only the final answer."
-        private const val APP_REFERER = "https://github.com/anomalyco/Turtleboard"
-        private const val APP_TITLE = "Turtleboard"
-        private const val APP_CATEGORIES = "programming-app"
+        private const val APP_REFERER = "https://github.com/Turtlecute33/WisprBoard"
+        private const val APP_TITLE = "WisprBoard"
+        private const val APP_CATEGORIES = "writing-assistant"
         const val DEFAULT_CONNECT_TIMEOUT_MS = 15_000
         const val DEFAULT_READ_TIMEOUT_MS = 90_000
         private const val MAX_ATTEMPTS = 3
@@ -160,9 +160,10 @@ class OpenRouterClient(
             } catch (e: InterruptedIOException) {
                 throw InterruptedException()
             } catch (e: java.io.IOException) {
-                // Never propagate the underlying IOException's message — on some Android stacks
-                // it includes the full request URL plus headers (Authorization: Bearer …). Swap
-                // it for a constant; the cause chain remains intact for debug logging.
+                // Never propagate the underlying IOException — on some Android stacks its message
+                // includes the full request URL plus headers (Authorization: Bearer …). We throw a
+                // bare OpenRouterException with no cause attached on purpose; do NOT pass `cause = e`
+                // here, or a logged stack trace could leak the API key.
                 if (attempt == MAX_ATTEMPTS - 1) throw OpenRouterException("Network error")
                 lastError = e
                 nextDelayOverrideMs = -1L
@@ -254,7 +255,12 @@ class OpenRouterClient(
         val textContent = JSONObject().apply {
             put("type", "text")
             put("text", systemPrompt)
-            if (provider == AiProvider.OPENROUTER && ModelCatalog.openRouterSupportsCache(model)) {
+            // Attach a prompt-cache breakpoint on the (stable) system prompt for every OpenRouter
+            // request. Providers that need an explicit breakpoint (Anthropic, legacy Gemini) get
+            // one; providers that cache implicitly (OpenAI, Gemini 2.5+, Grok, DeepSeek) ignore it
+            // harmlessly. Caching only actually engages once the cached prefix clears the provider's
+            // minimum-token floor (~1K for Gemini Flash), so short prompts still won't cache.
+            if (provider == AiProvider.OPENROUTER) {
                 put("cache_control", JSONObject().apply { put("type", "ephemeral") })
             }
         }
@@ -612,6 +618,7 @@ class OpenRouterClient(
         if (raw.isEmpty()) return -1L
         raw.toLongOrNull()?.let { seconds ->
             if (seconds < 0) return -1L
+            if (seconds > MAX_RETRY_AFTER_MS / 1000L) return MAX_RETRY_AFTER_MS
             return (seconds * 1000L).coerceIn(0L, MAX_RETRY_AFTER_MS)
         }
         return try {

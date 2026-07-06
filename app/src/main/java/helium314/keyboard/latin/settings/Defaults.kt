@@ -41,11 +41,11 @@ object Defaults {
     }
 
     private const val DEFAULT_SIZE_SCALE = 1.0f // 100%
-    const val PREF_THEME_STYLE = KeyboardTheme.STYLE_MATERIAL
+    const val PREF_THEME_STYLE = KeyboardTheme.STYLE_ROUNDED
     const val PREF_ICON_STYLE = KeyboardTheme.STYLE_MATERIAL
     const val PREF_THEME_COLORS = KeyboardTheme.THEME_LIGHT
     const val PREF_THEME_COLORS_NIGHT = KeyboardTheme.THEME_DARK
-    const val PREF_THEME_KEY_BORDERS = false
+    const val PREF_THEME_KEY_BORDERS = true
     @JvmField
     val PREF_THEME_DAY_NIGHT = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
     const val PREF_CUSTOM_ICON_NAMES = ""
@@ -61,7 +61,7 @@ object Defaults {
     var PREF_POPUP_ON = true
     const val PREF_AUTO_CORRECTION = true
     const val PREF_MORE_AUTO_CORRECTION = false
-    const val PREF_AUTO_CORRECT_THRESHOLD = 0.185f
+    const val PREF_AUTO_CORRECT_THRESHOLD = 0.14f
     const val PREF_AUTOCORRECT_SHORTCUTS = true
     const val PREF_BACKSPACE_REVERTS_AUTOCORRECT = true
     const val PREF_CENTER_SUGGESTION_TEXT_TO_ENTER = false
@@ -108,6 +108,8 @@ object Defaults {
     const val PREF_SUGGEST_CLIPBOARD_CONTENT = false
     const val PREF_GESTURE_INPUT = true
     const val PREF_VIBRATION_DURATION_SETTINGS = -1
+    const val PREF_VIBRATION_INTENSITY = -1
+    const val PREF_KEY_PRESS_RIPPLE = true
     const val PREF_KEYPRESS_SOUND_VOLUME = -0.01f
     const val PREF_KEY_LONGPRESS_TIMEOUT = 300
     const val PREF_ENABLE_EMOJI_ALT_PHYSICAL_KEY = true
@@ -143,7 +145,7 @@ object Defaults {
     const val PREF_ENABLE_CLIPBOARD_HISTORY = false
     const val PREF_CLIPBOARD_HISTORY_RETENTION_TIME = 10 // minutes
     const val PREF_CLIPBOARD_HISTORY_PINNED_FIRST = true
-    const val PREF_ADD_TO_PERSONAL_DICTIONARY = false
+    const val PREF_ADD_TO_PERSONAL_DICTIONARY = true
     @JvmField
     val PREF_NAVBAR_COLOR = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
     const val PREF_NARROW_KEY_GAPS = false
@@ -205,6 +207,7 @@ object Defaults {
     const val PREF_VOICE_MAX_DURATION_SECONDS = 90
     const val PREF_VOICE_AUTO_STOP_SILENCE = false
     const val PREF_VOICE_AUTO_STOP_SILENCE_SECONDS = 2
+    const val PREF_VOICE_MIC_SENSITIVITY = "normal"
     const val PREF_VOICE_LANGUAGE_HINT = true
     const val PREF_VOICE_SPACE_HEURISTIC = true
     const val PREF_VOICE_HAPTIC_FEEDBACK = true

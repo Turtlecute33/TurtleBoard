@@ -87,6 +87,7 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     public static final String PREF_VOICE_MAX_DURATION_SECONDS = "voice_max_duration_seconds";
     public static final String PREF_VOICE_AUTO_STOP_SILENCE = "voice_auto_stop_silence";
     public static final String PREF_VOICE_AUTO_STOP_SILENCE_SECONDS = "voice_auto_stop_silence_seconds";
+    public static final String PREF_VOICE_MIC_SENSITIVITY = "voice_mic_sensitivity";
     public static final String PREF_VOICE_LANGUAGE_HINT = "voice_language_hint";
     public static final String PREF_VOICE_SPACE_HEURISTIC = "voice_space_heuristic";
     public static final String PREF_VOICE_HAPTIC_FEEDBACK = "voice_haptic_feedback";
@@ -157,6 +158,8 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     public static final String PREF_SUGGEST_CLIPBOARD_CONTENT = "suggest_clipboard_content";
     public static final String PREF_GESTURE_INPUT = "gesture_input";
     public static final String PREF_VIBRATION_DURATION_SETTINGS = "vibration_duration_settings";
+    public static final String PREF_VIBRATION_INTENSITY = "vibration_intensity";
+    public static final String PREF_KEY_PRESS_RIPPLE = "key_press_ripple";
     public static final String PREF_KEYPRESS_SOUND_VOLUME = "keypress_sound_volume";
     public static final String PREF_KEY_LONGPRESS_TIMEOUT = "key_longpress_timeout";
     public static final String PREF_ENABLE_EMOJI_ALT_PHYSICAL_KEY = "enable_emoji_alt_physical_key";
@@ -194,6 +197,9 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
 
     public static final String PREF_ENABLE_CLIPBOARD_HISTORY = "enable_clipboard_history";
     public static final String PREF_CLIPBOARD_HISTORY_RETENTION_TIME = "clipboard_history_retention_time";
+    // Sentinel meaning "keep clips forever"; one above the largest selectable retention (24 h).
+    // Stored in prefs, so changing it requires a remapping step in AppUpgrade.
+    public static final int CLIPBOARD_RETENTION_NO_LIMIT_MINUTES = 1441;
     public static final String PREF_CLIPBOARD_HISTORY_PINNED_FIRST = "clipboard_history_pinned_first";
 
     public static final String PREF_ADD_TO_PERSONAL_DICTIONARY = "add_to_personal_dictionary";

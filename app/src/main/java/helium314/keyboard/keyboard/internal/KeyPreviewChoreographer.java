@@ -9,10 +9,11 @@ package helium314.keyboard.keyboard.internal;
 import android.content.Context;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.Interpolator;
+import android.view.animation.OvershootInterpolator;
 
 import helium314.keyboard.keyboard.Key;
 import helium314.keyboard.latin.common.ColorType;
-import helium314.keyboard.latin.common.Colors;
 import helium314.keyboard.latin.common.CoordinateUtils;
 import helium314.keyboard.latin.settings.Settings;
 import helium314.keyboard.latin.utils.ViewLayoutUtils;
@@ -27,6 +28,13 @@ import java.util.HashMap;
  * - how key previews should be shown and dismissed.
  */
 public final class KeyPreviewChoreographer {
+    // Spring "pop" used when a preview appears: it grows up out of the key (pivot is bottom-centre)
+    // with a slight overshoot so the bubble feels physical instead of snapping into place.
+    private static final long KEY_PREVIEW_SHOW_UP_DURATION = 90L;
+    private static final float KEY_PREVIEW_SHOW_UP_START_SCALE = 0.7f;
+    private static final float KEY_PREVIEW_SHOW_UP_START_ALPHA = 0.7f;
+    private static final Interpolator SHOW_UP_INTERPOLATOR = new OvershootInterpolator(2.0f);
+
     // Free {@link KeyPreviewView} pool that can be used for key preview.
     private final ArrayDeque<KeyPreviewView> mFreeKeyPreviewViews = new ArrayDeque<>();
     // Map from {@link Key} to {@link KeyPreviewView} that is currently being displayed as key
@@ -67,8 +75,13 @@ public final class KeyPreviewChoreographer {
         if (keyPreviewView == null) {
             return;
         }
-        // Dismiss preview
+        // Dismiss preview. Cancel any running pop animation and reset the transform so the pooled
+        // view is handed back in a clean state for the next key.
         mShowingKeyPreviewViews.remove(key);
+        keyPreviewView.animate().cancel();
+        keyPreviewView.setScaleX(1.0f);
+        keyPreviewView.setScaleY(1.0f);
+        keyPreviewView.setAlpha(1.0f);
         keyPreviewView.setTag(null);
         keyPreviewView.setVisibility(View.INVISIBLE);
         mFreeKeyPreviewViews.add(keyPreviewView);
@@ -107,8 +120,11 @@ public final class KeyPreviewChoreographer {
         }
         final boolean hasPopupKeys = (key.getPopupKeys() != null);
         keyPreviewView.setPreviewBackground(hasPopupKeys, keyPreviewPosition);
-        final Colors colors = Settings.getValues().mColors;
-        colors.setBackground(keyPreviewView, ColorType.KEY_PREVIEW_BACKGROUND);
+        final var settingsValues = Settings.getValues();
+        if (settingsValues != null) {
+            // too early in startup to resolve the theme color; placement below still proceeds
+            settingsValues.mColors.setBackground(keyPreviewView, ColorType.KEY_PREVIEW_BACKGROUND);
+        }
 
         // The key preview is placed vertically above the top edge of the parent key with an
         // arbitrary offset.
@@ -122,6 +138,19 @@ public final class KeyPreviewChoreographer {
 
     void showKeyPreview(final Key key, final KeyPreviewView keyPreviewView) {
         keyPreviewView.setVisibility(View.VISIBLE);
+        // Spring the bubble up out of the key. Cancel first so reused pooled views don't inherit a
+        // half-finished animation from a previous keypress.
+        keyPreviewView.animate().cancel();
+        keyPreviewView.setAlpha(KEY_PREVIEW_SHOW_UP_START_ALPHA);
+        keyPreviewView.setScaleX(KEY_PREVIEW_SHOW_UP_START_SCALE);
+        keyPreviewView.setScaleY(KEY_PREVIEW_SHOW_UP_START_SCALE);
+        keyPreviewView.animate()
+                .alpha(1.0f)
+                .scaleX(1.0f)
+                .scaleY(1.0f)
+                .setDuration(KEY_PREVIEW_SHOW_UP_DURATION)
+                .setInterpolator(SHOW_UP_INTERPOLATOR)
+                .start();
         mShowingKeyPreviewViews.put(key, keyPreviewView);
     }
 
