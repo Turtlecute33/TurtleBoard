@@ -529,7 +529,7 @@ class Suggest(private val mDictionaryFacilitator: DictionaryFacilitator) {
                     )
                 )
                 if (DebugFlags.DEBUG_ENABLED)
-                    Log.d(TAG, "reduced score of ${first.mWord} from ${first.mScore}, new first: ${suggestionResults.first().mWord} (${suggestionResults.first().mScore})")
+                    Log.d(TAG, "reduced personalized suggestion score")
             }
         }
 
@@ -555,7 +555,7 @@ class Suggest(private val mDictionaryFacilitator: DictionaryFacilitator) {
                     suggestionsContainer.remove(suggestion)
                     suggestionsContainer.add(0, suggestion)
                     if (DebugFlags.DEBUG_ENABLED)
-                        Log.d(TAG, "replaced batch word $pseudoTypedWordInfo with $suggestion")
+                        Log.d(TAG, "replaced batch word with personalized suggestion")
                     return suggestion
                 }
             }

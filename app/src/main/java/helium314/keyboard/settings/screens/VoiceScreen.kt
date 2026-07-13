@@ -10,6 +10,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -469,7 +470,9 @@ fun createVoiceSettings(context: Context) = listOf(
 private fun VoiceApiKeyPreference(setting: Setting, provider: AiProvider) {
     val ctx = LocalContext.current
     var showDialog by rememberSaveable { mutableStateOf(false) }
-    var stored by remember { mutableStateOf(SecretStore.getApiKey(ctx, provider.apiKeyPrefKey(), provider.defaultApiKey())) }
+    var storedLength by remember {
+        mutableIntStateOf(SecretStore.getApiKey(ctx, provider.apiKeyPrefKey(), provider.defaultApiKey()).length)
+    }
     Preference(
         name = setting.title,
         onClick = {
@@ -482,16 +485,16 @@ private fun VoiceApiKeyPreference(setting: Setting, provider: AiProvider) {
         // Mask the key but reflect its length so the user can spot accidental truncation
         // ("did I paste the whole thing?") without ever exposing the value itself. Capped to
         // keep the row layout stable.
-        description = if (stored.isNotEmpty()) "•".repeat(stored.length.coerceIn(8, 24)) else setting.description,
+        description = if (storedLength > 0) "•".repeat(storedLength.coerceIn(8, 24)) else setting.description,
     )
     if (showDialog) {
         TextInputDialog(
             onDismissRequest = { showDialog = false },
             onConfirmed = {
                 SecretStore.setApiKey(ctx, provider.apiKeyPrefKey(), it.trim())
-                stored = it.trim()
+                storedLength = it.trim().length
             },
-            initialText = stored,
+            initialText = SecretStore.getApiKey(ctx, provider.apiKeyPrefKey(), provider.defaultApiKey()),
             title = { Text(setting.title) },
             singleLine = true,
             isPassword = true,

@@ -42,7 +42,7 @@ class PopupKeysKeyboardAccessibilityDelegate(
 
     override fun onHoverEnter(event: MotionEvent) {
         if (DEBUG_HOVER) {
-            Log.d(TAG, "onHoverEnter: key=" + getHoverKeyOf(event))
+            Log.d(TAG, "onHoverEnter")
         }
         super.onHoverEnter(event)
         val actionIndex = event.actionIndex
@@ -66,7 +66,7 @@ class PopupKeysKeyboardAccessibilityDelegate(
     override fun onHoverExit(event: MotionEvent) {
         val lastKey = lastHoverKey
         if (DEBUG_HOVER) {
-            Log.d(TAG, "onHoverExit: key=" + getHoverKeyOf(event) + " last=" + lastKey)
+            Log.d(TAG, "onHoverExit")
         }
         if (lastKey != null) {
             super.onHoverExitFrom(lastKey)

@@ -18,6 +18,7 @@ object SecretStore {
 
     private const val TAG = "SecretStore"
     private const val ENCRYPTED_FILE = "wisprboard_secrets"
+    @Volatile private var cachedSecurePrefs: SharedPreferences? = null
 
     fun isSecureStorageAvailable(context: Context): Boolean = securePrefs(context) != null
 
@@ -67,17 +68,19 @@ object SecretStore {
         // EncryptedSharedPreferences relies on KeyGenParameterSpec (API 23+). Keep the reference
         // inside this method so the class isn't loaded on older devices.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return null
-        return try {
-            EncryptedPrefsFactory.create(context, ENCRYPTED_FILE)
-        } catch (e: Exception) {
-            // Transient AndroidKeyStore failures (e.g. user has not unlocked the device yet,
-            // OS update mid-flight) used to trigger an automatic destructive recovery here that
-            // wiped the user's stored API keys. That made one-shot transient hiccups permanent.
-            // Now we just surface the failure: callers see "no API key" and can retry, or the
-            // user can hit `clearSecureStorage()` from settings if the prefs file really is
-            // corrupted. Cause chain is logged for diagnosis.
-            Log.w(TAG, "Failed to open encrypted prefs", e)
-            null
+        cachedSecurePrefs?.let { return it }
+        return synchronized(this) {
+            cachedSecurePrefs?.let { return@synchronized it }
+            try {
+                EncryptedPrefsFactory.create(context.applicationContext, ENCRYPTED_FILE).also {
+                    cachedSecurePrefs = it
+                }
+            } catch (e: Exception) {
+                // Do not cache failures: AndroidKeyStore can be transiently unavailable before
+                // user unlock or during an OS update, and a later call should be allowed to retry.
+                Log.w(TAG, "Failed to open encrypted prefs", e)
+                null
+            }
         }
     }
 
@@ -88,15 +91,20 @@ object SecretStore {
      * that resolve on their own.
      */
     fun clearSecureStorage(context: Context) {
-        try {
-            context.getSharedPreferences(ENCRYPTED_FILE, Context.MODE_PRIVATE).edit(commit = true) {
-                clear()
+        synchronized(this) {
+            try {
+                cachedSecurePrefs?.edit(commit = true) { clear() }
+                    ?: context.getSharedPreferences(ENCRYPTED_FILE, Context.MODE_PRIVATE).edit(commit = true) {
+                        clear()
+                    }
+                cachedSecurePrefs = null
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    context.deleteSharedPreferences(ENCRYPTED_FILE)
+                }
+            } catch (e: Exception) {
+                cachedSecurePrefs = null
+                Log.w(TAG, "Failed to clear encrypted prefs file", e)
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                context.deleteSharedPreferences(ENCRYPTED_FILE)
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to clear encrypted prefs file", e)
         }
     }
 }
