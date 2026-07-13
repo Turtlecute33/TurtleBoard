@@ -161,8 +161,7 @@ class MainKeyboardAccessibilityDelegate(
         val x = key.hitBox.centerX()
         val y = key.hitBox.centerY()
         if (DEBUG_HOVER) {
-            Log.d(TAG, "performClickOn: key=" + key
-                    + " inIgnoreBounds=" + mBoundsToIgnoreHoverEvent.contains(x, y))
+            Log.d(TAG, "performClickOn: inIgnoreBounds=" + mBoundsToIgnoreHoverEvent.contains(x, y))
         }
         if (mBoundsToIgnoreHoverEvent.contains(x, y)) {
             // This hover exit event points to the key that should be ignored.
@@ -177,8 +176,7 @@ class MainKeyboardAccessibilityDelegate(
         val x = key.hitBox.centerX()
         val y = key.hitBox.centerY()
         if (DEBUG_HOVER) {
-            Log.d(TAG, "onHoverEnterTo: key=" + key
-                    + " inIgnoreBounds=" + mBoundsToIgnoreHoverEvent.contains(x, y))
+            Log.d(TAG, "onHoverEnterTo: inIgnoreBounds=" + mBoundsToIgnoreHoverEvent.contains(x, y))
         }
         mAccessibilityLongPressTimer.cancelLongPress()
         if (mBoundsToIgnoreHoverEvent.contains(x, y)) {
@@ -197,8 +195,7 @@ class MainKeyboardAccessibilityDelegate(
         val x = key.hitBox.centerX()
         val y = key.hitBox.centerY()
         if (DEBUG_HOVER) {
-            Log.d(TAG, "onHoverExitFrom: key=" + key
-                    + " inIgnoreBounds=" + mBoundsToIgnoreHoverEvent.contains(x, y))
+            Log.d(TAG, "onHoverExitFrom: inIgnoreBounds=" + mBoundsToIgnoreHoverEvent.contains(x, y))
         }
         mAccessibilityLongPressTimer.cancelLongPress()
         super.onHoverExitFrom(key)
@@ -206,7 +203,7 @@ class MainKeyboardAccessibilityDelegate(
 
     override fun performLongClickOn(key: Key) {
         if (DEBUG_HOVER) {
-            Log.d(TAG, "performLongClickOn: key=$key")
+            Log.d(TAG, "performLongClickOn")
         }
         val tracker = PointerTracker.getPointerTracker(HOVER_EVENT_POINTER_ID)
         val eventTime = SystemClock.uptimeMillis()

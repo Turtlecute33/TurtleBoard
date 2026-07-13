@@ -613,6 +613,21 @@ public class LatinIME extends InputMethodService implements
         StatsUtils.onCreate(mSettings.getCurrent(), mRichImm);
 
         mVoiceInputManager = new VoiceInputManager(this, new VoiceInputManager.Callbacks() {
+            @Nullable
+            @Override
+            public Integer getBlockedErrorResId() {
+                final SettingsValues settingsValues = mSettings.getCurrent();
+                if (settingsValues == null) return R.string.voice_error_unsupported_field;
+                final EditorInfo ei = getCurrentInputEditorInfo();
+                final int imeOptions = ei != null ? ei.imeOptions : 0;
+                return VoiceInputManager.getBlockedErrorResId(
+                        settingsValues.mInputAttributes.mInputType,
+                        settingsValues.mInputAttributes.mIsPasswordField,
+                        settingsValues.mInputAttributes.mNoLearning,
+                        settingsValues.mIncognitoModeEnabled,
+                        imeOptions);
+            }
+
             @Override
             public void onRecordingStarted() {
                 if (isVoiceHapticEnabled()) AudioAndHapticFeedbackManager.getInstance().vibrate(25L);

@@ -316,12 +316,12 @@ public abstract class AndroidWordLevelSpellCheckerSession extends Session {
 
             if (isInDictForAnyCapitalization(text, capitalizeType)) {
                 if (DebugFlags.DEBUG_ENABLED) {
-                    Log.i(TAG, "onGetSuggestionsInternal() : [" + text + "] is a valid word");
+                    Log.i(TAG, "onGetSuggestionsInternal() : input is a valid word");
                 }
                 return AndroidSpellCheckerService.getInDictEmptySuggestions();
             }
             if (DebugFlags.DEBUG_ENABLED) {
-                Log.i(TAG, "onGetSuggestionsInternal() : [" + text + "] is NOT a valid word");
+                Log.i(TAG, "onGetSuggestionsInternal() : input is not a valid word");
             }
 
             final Keyboard keyboard = mService.getKeyboardForLocale(mLocale);

@@ -63,19 +63,11 @@ class OpenRouterClient(
         // Sanity cap to prevent pathological responses from consuming unbounded memory.
         // Real transcription responses are kilobytes; 1 MB is ~3 orders of magnitude of headroom.
         private const val MAX_RESPONSE_BYTES = 1_000_000L
-        // Error bodies are strictly for debug logging; cap them tightly so a misbehaving server
-        // can't make us buffer megabytes of HTML just to log a prefix.
+        // Error bodies are retained only for narrow response classification (for example, detecting
+        // an unavailable ZDR route); cap them tightly so a misbehaving server cannot consume memory.
         private const val MAX_ERROR_BYTES = 64 * 1024L
         // Upper bound on how long we'll honor a server-supplied Retry-After, to stay responsive.
         private const val MAX_RETRY_AFTER_MS = 30_000L
-        private val SENSITIVE_LOG_PATTERNS: List<Pair<Regex, String>> = listOf(
-            Regex("(?i)Bearer\\s+\\S+") to "Bearer ***",
-            Regex("(?i)Authorization\\s*[:=]\\s*\\S+") to "Authorization: ***",
-            Regex("(?i)X-Api-Key\\s*[:=]\\s*\\S+") to "X-Api-Key: ***",
-            Regex("(?i)(\"?api[_-]?key\"?\\s*[:=]\\s*\"?)[^\"\\s,}]+") to "$1***",
-            Regex("(?i)(\"?token\"?\\s*[:=]\\s*[\"']?)[^\"'\\s,}]+") to "$1***",
-            Regex("sk-[A-Za-z0-9_\\-]{10,}") to "sk-***",
-        )
         // Plain ASCII sentinel: org.json escapes control characters (e.g. U+0000 -> literal "\u0000"),
         // which used to make the placeholder un-findable in the serialized body. Unlikely to collide
         // with real content.
@@ -206,7 +198,7 @@ class OpenRouterClient(
             val responseCode = connection.responseCode
             if (responseCode != HttpURLConnection.HTTP_OK) {
                 val errorBody = readErrorBodyCapped(connection.errorStream)
-                if (BuildConfig.DEBUG) Log.e(TAG, "API error $responseCode: ${sanitizeForLog(errorBody)}")
+                if (BuildConfig.DEBUG) Log.e(TAG, "API error $responseCode")
                 val retryAfterMs = parseRetryAfterMs(connection.getHeaderField("Retry-After"))
                 throw OpenRouterException("API error: $responseCode", responseCode, retryAfterMs, errorBody)
             }
@@ -323,7 +315,7 @@ class OpenRouterClient(
             val responseCode = connection.responseCode
             if (responseCode != HttpURLConnection.HTTP_OK) {
                 val errorBody = readErrorBodyCapped(connection.errorStream)
-                if (BuildConfig.DEBUG) Log.e(TAG, "API error $responseCode: ${sanitizeForLog(errorBody)}")
+                if (BuildConfig.DEBUG) Log.e(TAG, "API error $responseCode")
                 val retryAfterMs = parseRetryAfterMs(connection.getHeaderField("Retry-After"))
                 throw OpenRouterException("API error: $responseCode", responseCode, retryAfterMs, errorBody)
             }
@@ -393,7 +385,7 @@ class OpenRouterClient(
             val responseCode = connection.responseCode
             if (responseCode != HttpURLConnection.HTTP_OK) {
                 val errorBody = readErrorBodyCapped(connection.errorStream)
-                if (BuildConfig.DEBUG) Log.e(TAG, "API error $responseCode: ${sanitizeForLog(errorBody)}")
+                if (BuildConfig.DEBUG) Log.e(TAG, "API error $responseCode")
                 val retryAfterMs = parseRetryAfterMs(connection.getHeaderField("Retry-After"))
                 throw OpenRouterException("API error: $responseCode", responseCode, retryAfterMs, errorBody)
             }
@@ -435,7 +427,7 @@ class OpenRouterClient(
             val responseCode = connection.responseCode
             if (responseCode != HttpURLConnection.HTTP_OK) {
                 val errorBody = readErrorBodyCapped(connection.errorStream)
-                if (BuildConfig.DEBUG) Log.e(TAG, "API error $responseCode: ${sanitizeForLog(errorBody)}")
+                if (BuildConfig.DEBUG) Log.e(TAG, "API error $responseCode")
                 val retryAfterMs = parseRetryAfterMs(connection.getHeaderField("Retry-After"))
                 throw OpenRouterException("API error: $responseCode", responseCode, retryAfterMs, errorBody)
             }
@@ -573,22 +565,10 @@ class OpenRouterClient(
         return buf.toString(Charsets.UTF_8.name())
     }
 
-    @VisibleForTesting
-    internal fun sanitizeForLog(body: String): String {
-        // Guard against the remote echoing our Authorization header or any api key field back to us.
-        // Patterns are ordered from most-specific to least so each substitution leaves subsequent
-        // ones with cleaner input to match against.
-        var sanitized = body
-        for ((regex, replacement) in SENSITIVE_LOG_PATTERNS) {
-            sanitized = sanitized.replace(regex, replacement)
-        }
-        return sanitized
-    }
-
     /**
-     * Reads up to [MAX_ERROR_BYTES] from [stream] for debug logging only. Unlike the success-path
-     * reader, hitting the cap is not an error — we silently truncate so a misbehaving server can't
-     * turn a 500 response into a second, bigger failure.
+     * Reads up to [MAX_ERROR_BYTES] from [stream] for internal error classification. Unlike the
+     * success-path reader, hitting the cap is not an error. The returned content must never be
+     * logged or shown to users because providers may echo request data.
      */
     private fun readErrorBodyCapped(stream: java.io.InputStream?): String {
         if (stream == null) return ""

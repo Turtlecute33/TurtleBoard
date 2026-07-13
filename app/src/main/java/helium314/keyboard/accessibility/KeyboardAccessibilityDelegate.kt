@@ -151,7 +151,7 @@ open class KeyboardAccessibilityDelegate<KV : KeyboardView>(
     protected open fun onHoverEnter(event: MotionEvent) {
         val key = getHoverKeyOf(event)
         if (DEBUG_HOVER) {
-            Log.d(TAG, "onHoverEnter: key=$key")
+            Log.d(TAG, "onHoverEnter")
         }
         key?.let { onHoverEnterTo(it) }
         mLastHoverKey = key
@@ -181,7 +181,7 @@ open class KeyboardAccessibilityDelegate<KV : KeyboardView>(
     protected open fun onHoverExit(event: MotionEvent) {
         val lastKey = mLastHoverKey
         if (DEBUG_HOVER) {
-            Log.d(TAG, "onHoverExit: key=" + getHoverKeyOf(event) + " last=" + lastKey)
+            Log.d(TAG, "onHoverExit")
         }
         lastKey?.let { onHoverExitFrom(it) }
         val key = getHoverKeyOf(event)
@@ -199,7 +199,7 @@ open class KeyboardAccessibilityDelegate<KV : KeyboardView>(
      */
     open fun performClickOn(key: Key) {
         if (DEBUG_HOVER) {
-            Log.d(TAG, "performClickOn: key=$key")
+            Log.d(TAG, "performClickOn")
         }
         simulateTouchEvent(MotionEvent.ACTION_DOWN, key)
         simulateTouchEvent(MotionEvent.ACTION_UP, key)
@@ -228,7 +228,7 @@ open class KeyboardAccessibilityDelegate<KV : KeyboardView>(
      */
     protected open fun onHoverEnterTo(key: Key) {
         if (DEBUG_HOVER) {
-            Log.d(TAG, "onHoverEnterTo: key=$key")
+            Log.d(TAG, "onHoverEnterTo")
         }
         key.onPressed()
         mKeyboardView.invalidateKey(key)
@@ -251,7 +251,7 @@ open class KeyboardAccessibilityDelegate<KV : KeyboardView>(
      */
     protected open fun onHoverExitFrom(key: Key) {
         if (DEBUG_HOVER) {
-            Log.d(TAG, "onHoverExitFrom: key=$key")
+            Log.d(TAG, "onHoverExitFrom")
         }
         key.onReleased()
         mKeyboardView.invalidateKey(key)

@@ -1152,6 +1152,8 @@ New dictionary:
     <string name="voice_error_not_enabled">Enable Voice Input in settings</string>
     <string name="voice_error_no_permission">Grant microphone permission in settings</string>
     <string name="voice_error_no_network">No internet connection</string>
+    <string name="voice_error_sensitive_field">Voice input is unavailable in sensitive fields</string>
+    <string name="voice_error_unsupported_field">Voice input is unavailable in this field</string>
     <string name="voice_error_stt_openrouter_only">Dedicated STT is only available with OpenRouter</string>
     <string name="voice_error_transcription_failed">Transcription failed</string>
     <string name="voice_error_rate_limited">AI provider rate limit reached — try again in a moment</string>

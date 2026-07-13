@@ -879,7 +879,7 @@ public final class InputLogic {
                     return;
                 }
                 // unknown event
-                Log.e(TAG, "unknown event, key code: "+keyCode+", codepoint "+event.getCodePoint()+", meta: "+event.getMetaState());
+                Log.e(TAG, "Unknown input event; payload omitted for privacy");
                 if (DebugFlags.DEBUG_ENABLED)
                     throw new RuntimeException("Unknown event");
         }
@@ -2488,7 +2488,7 @@ public final class InputLogic {
         long startTimeMillis = 0;
         if (DebugFlags.DEBUG_ENABLED) {
             startTimeMillis = System.currentTimeMillis();
-            Log.d(TAG, "commitChosenWord() : [" + chosenWord + "]");
+            Log.d(TAG, "commitChosenWord() : " + chosenWord.length() + " characters");
         }
         // essentially reverted https://github.com/lineageos/android_packages_inputmethods_LatinIME/commit/ee6de1466bc98e27bd414c9a7451f2aee3f9e721
         // can't find any drawback (performance, neither when setting nor when reading)
@@ -2509,7 +2509,7 @@ public final class InputLogic {
             long runTimeMillis = System.currentTimeMillis() - startTimeMillis;
             Log.d(TAG, "commitChosenWord() : " + runTimeMillis + " ms to run "
                     + "Connection.getNgramContextFromNthPreviousWord()");
-            Log.d(TAG, "commitChosenWord() : NgramContext = " + ngramContext);
+            Log.d(TAG, "commitChosenWord() : n-gram context retrieved");
             startTimeMillis = System.currentTimeMillis();
         }
         mConnection.commitText(chosenWordWithSuggestions, 1);

@@ -52,8 +52,17 @@ fun TextInputDialog(
     reducePadding: Boolean = false,
     checkTextValid: (text: String) -> Boolean = { it.isNotBlank() }
 ) {
-    var value by rememberSaveable(stateSaver = TextFieldValue.Saver) {
-        mutableStateOf(TextFieldValue(initialText, selection = TextRange(if (singleLine) initialText.length else 0)))
+    val initialValue = TextFieldValue(
+        initialText,
+        selection = TextRange(if (singleLine) initialText.length else 0),
+    )
+    // Never put passwords or API keys into the saved-instance-state bundle. Losing an unfinished
+    // secret edit on activity recreation is preferable to handing the value to framework state
+    // persistence. Non-secret text fields retain the existing rotation behavior.
+    var value by if (isPassword) {
+        remember(initialText) { mutableStateOf(initialValue) }
+    } else {
+        rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(initialValue) }
     }
 
     ThreeButtonAlertDialog(

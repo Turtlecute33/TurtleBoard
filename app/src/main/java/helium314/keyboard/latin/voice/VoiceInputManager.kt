@@ -5,12 +5,16 @@ import android.Manifest
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.text.InputType
+import android.view.inputmethod.EditorInfo
 import android.widget.Toast
+import androidx.annotation.StringRes
 import helium314.keyboard.latin.BuildConfig
 import helium314.keyboard.latin.R
 import helium314.keyboard.latin.permissions.PermissionsUtil
 import helium314.keyboard.latin.settings.Defaults
 import helium314.keyboard.latin.settings.Settings
+import helium314.keyboard.latin.utils.InputTypeUtils
 import helium314.keyboard.latin.utils.Log
 import helium314.keyboard.latin.utils.prefs
 import java.io.File
@@ -44,6 +48,33 @@ class VoiceInputManager(
         // Only sweep recordings old enough that they cannot belong to an in-flight session — a
         // rapid stop→record could otherwise delete the previous recording's file mid-finalize.
         private const val ORPHAN_RECORDING_MAX_AGE_MS = 60_000L
+
+        /**
+         * Apps do not expose a reliable credit-card field flag, so network-backed voice input is
+         * restricted to ordinary prose fields and fails closed for editor privacy signals.
+         */
+        @JvmStatic
+        @StringRes
+        fun getBlockedErrorResId(
+            inputType: Int,
+            isPasswordField: Boolean,
+            noLearning: Boolean,
+            incognitoModeEnabled: Boolean,
+            imeOptions: Int,
+        ): Int? {
+            if (isPasswordField || noLearning || incognitoModeEnabled ||
+                (imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0 ||
+                (inputType and InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) != 0
+            ) {
+                return R.string.voice_error_sensitive_field
+            }
+            if ((inputType and InputType.TYPE_MASK_CLASS) != InputType.TYPE_CLASS_TEXT ||
+                InputTypeUtils.isUriOrEmailType(inputType)
+            ) {
+                return R.string.voice_error_unsupported_field
+            }
+            return null
+        }
     }
 
     enum class State { IDLE, RECORDING, TRANSCRIBING }
@@ -55,6 +86,8 @@ class VoiceInputManager(
     data class SpacingContext(val charBefore: Int?, val charAfter: Int?)
 
     interface Callbacks {
+        @StringRes
+        fun getBlockedErrorResId(): Int? = null
         fun onRecordingStarted()
         fun onTranscribing()
         fun onFinished()
@@ -103,6 +136,11 @@ class VoiceInputManager(
 
         if (!prefs.getBoolean(Settings.PREF_VOICE_INPUT_ENABLED, Defaults.PREF_VOICE_INPUT_ENABLED)) {
             Toast.makeText(context, R.string.voice_error_not_enabled, Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        callbacks.getBlockedErrorResId()?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
             return
         }
 
