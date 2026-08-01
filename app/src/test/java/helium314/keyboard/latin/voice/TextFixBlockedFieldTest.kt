@@ -53,10 +53,20 @@ class TextFixBlockedFieldTest {
     }
 
     @Test
-    fun textNoSuggestionsFlagIsSensitive() {
+    fun textNoSuggestionsFlagAloneIsAllowed() {
+        // Chat composers and search boxes set this flag purely to hide the suggestion strip; it is
+        // not a privacy signal, so it must not block Text Fix by itself.
+        assertNull(call(inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS))
+    }
+
+    @Test
+    fun noSuggestionsStillBlockedWhenARealPrivacySignalIsPresent() {
         assertEquals(
             R.string.text_fix_error_sensitive_field,
-            call(inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS),
+            call(
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS,
+                noLearning = true,
+            ),
         )
     }
 

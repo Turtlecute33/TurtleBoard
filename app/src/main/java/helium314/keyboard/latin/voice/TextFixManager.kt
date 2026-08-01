@@ -54,9 +54,11 @@ class TextFixManager(
             if ((imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0) {
                 return R.string.text_fix_error_sensitive_field
             }
-            if ((inputType and InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) != 0) {
-                return R.string.text_fix_error_sensitive_field
-            }
+            // TYPE_TEXT_FLAG_NO_SUGGESTIONS is deliberately NOT treated as a privacy signal. Apps
+            // set it on ordinary prose fields (chat composers, search boxes) purely to suppress the
+            // suggestion strip, so blocking on it made Text Fix unusable across a lot of apps while
+            // protecting nothing: the real signals are password fields, no-learning, incognito and
+            // IME_FLAG_NO_PERSONALIZED_LEARNING, all checked above.
             when (inputType and InputType.TYPE_MASK_CLASS) {
                 InputType.TYPE_CLASS_TEXT -> {
                     if (InputTypeUtils.isUriOrEmailType(inputType)) {
@@ -158,6 +160,7 @@ class TextFixManager(
             .trim().ifEmpty { variant.promptDefault }
         val useZdr = provider == AiProvider.OPENROUTER &&
             prefs.getBoolean(Settings.PREF_OPENROUTER_ZDR_ENABLED, Defaults.PREF_OPENROUTER_ZDR_ENABLED)
+        warnIfZeroDataRetentionUnenforceable(context, provider, model, useZdr)
 
         state = State.WORKING
         callbacks.onWorking()

@@ -63,7 +63,10 @@ fun SwitchPreference(
         name = name,
         onClick = { switched(!value) },
         modifier = modifier,
-        description = description
+        description = description,
+        // The row is the touch target and the Switch below is decorative, so the on/off state has
+        // to be published here or screen readers never announce it.
+        switchState = value,
     ) {
         Switch(
             checked = value,

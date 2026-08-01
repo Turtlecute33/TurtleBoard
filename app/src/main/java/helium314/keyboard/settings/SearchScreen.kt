@@ -69,10 +69,25 @@ fun SearchSettingsScreen(
                 // rows currently on screen run their `Preference()` composition (each of which
                 // registers a SharedPreferences listener), which makes scrolling a long screen
                 // — Voice especially — meaningfully smoother than the previous verticalScroll
-                // Column that composed every row up-front. The cached `visibleItems` keeps the
-                // list stable so unrelated state changes don't reshuffle keys.
+                // Column that composed every row up-front.
+                //
+                // Keys are derived from the setting id alone, never the list position. Screens with
+                // conditional rows (Voice hides most of its rows until Voice Input is on) insert and
+                // remove entries, and a position-based key changed identity for every row after the
+                // insertion point — so LazyColumn tore down and rebuilt every visible row, listeners
+                // included, on something as small as flipping one switch. Duplicate values (the same
+                // category heading twice on one screen) get an occurrence suffix so keys stay unique
+                // without reintroducing that coupling.
                 val visibleItems = remember(settings) {
-                    settings.mapIndexedNotNull { index, value -> value?.let { index to it } }
+                    val occurrences = HashMap<String, Int>()
+                    settings.mapNotNull { value ->
+                        value?.let {
+                            val base = "${it.javaClass.simpleName}:$it"
+                            val seen = (occurrences[base] ?: 0) + 1
+                            occurrences[base] = seen
+                            (if (seen == 1) base else "$base#$seen") to it
+                        }
+                    }
                 }
                 Scaffold(
                     contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
@@ -80,7 +95,7 @@ fun SearchSettingsScreen(
                     LazyColumn(contentPadding = innerPadding) {
                         items(
                             items = visibleItems,
-                            key = { (index, value) -> "$index:${value.javaClass.simpleName}:$value" },
+                            key = { (key, _) -> key },
                             contentType = { (_, value) -> if (value is Int) "category" else "pref" },
                         ) { (_, value) ->
                             if (value is Int) {

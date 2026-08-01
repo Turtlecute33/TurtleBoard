@@ -68,37 +68,53 @@ fun TextFixScreen(
     )
 }
 
+/**
+ * The enable switch for a Text Fix button, gated on secure storage plus a one-time privacy
+ * disclosure. Both buttons hit the same network path with the same API key, so both need the same
+ * gate — the second one used to skip it entirely and could be turned on with neither check.
+ */
+@Composable
+private fun TextFixEnableSwitch(setting: Setting, default: Boolean) {
+    val ctx = LocalContext.current
+    val prefs = ctx.prefs()
+    val secureStorageMessage = stringResource(R.string.voice_error_secure_storage_unavailable)
+    val showPrivacyDialog = rememberSaveable { mutableStateOf(false) }
+    if (showPrivacyDialog.value) {
+        ConfirmationDialog(
+            onDismissRequest = { showPrivacyDialog.value = false },
+            onConfirmed = {
+                showPrivacyDialog.value = false
+                prefs.edit { putBoolean(setting.key, true) }
+            },
+            title = { Text(stringResource(R.string.text_fix_enable_privacy_title)) },
+            content = { Text(stringResource(R.string.text_fix_enable_privacy_message)) },
+            confirmButtonText = stringResource(R.string.text_fix_enable_privacy_confirm),
+        )
+    }
+    SwitchPreference(
+        setting,
+        default,
+        allowCheckedChange = { enabling ->
+            if (!enabling) true
+            else if (!SecretStore.isSecureStorageAvailable(ctx)) {
+                Toast.makeText(ctx, secureStorageMessage, Toast.LENGTH_SHORT).show()
+                false
+            } else if (prefs.getBoolean(Settings.PREF_TEXT_FIX_ENABLED, Defaults.PREF_TEXT_FIX_ENABLED)
+                || prefs.getBoolean(Settings.PREF_TEXT_FIX_2_ENABLED, Defaults.PREF_TEXT_FIX_2_ENABLED)) {
+                // The other button is already on, so the disclosure has been accepted. Don't make
+                // the user re-read it to enable the second one.
+                true
+            } else {
+                showPrivacyDialog.value = true
+                false
+            }
+        }
+    )
+}
+
 fun createTextFixSettings(context: Context) = listOf(
     Setting(context, Settings.PREF_TEXT_FIX_ENABLED, R.string.text_fix_enabled, R.string.text_fix_enabled_summary) { setting ->
-        val ctx = LocalContext.current
-        val prefs = ctx.prefs()
-        val secureStorageMessage = stringResource(R.string.voice_error_secure_storage_unavailable)
-        val showPrivacyDialog = rememberSaveable { mutableStateOf(false) }
-        if (showPrivacyDialog.value) {
-            ConfirmationDialog(
-                onDismissRequest = { showPrivacyDialog.value = false },
-                onConfirmed = {
-                    showPrivacyDialog.value = false
-                    prefs.edit { putBoolean(setting.key, true) }
-                },
-                title = { Text(stringResource(R.string.text_fix_enable_privacy_title)) },
-                content = { Text(stringResource(R.string.text_fix_enable_privacy_message)) },
-                confirmButtonText = stringResource(R.string.text_fix_enable_privacy_confirm),
-            )
-        }
-        SwitchPreference(
-            setting,
-            Defaults.PREF_TEXT_FIX_ENABLED,
-            allowCheckedChange = { enabling ->
-                if (enabling && !SecretStore.isSecureStorageAvailable(ctx)) {
-                    Toast.makeText(ctx, secureStorageMessage, Toast.LENGTH_SHORT).show()
-                    false
-                } else if (enabling) {
-                    showPrivacyDialog.value = true
-                    false
-                } else true
-            }
-        )
+        TextFixEnableSwitch(setting, Defaults.PREF_TEXT_FIX_ENABLED)
     },
     Setting(context, Settings.PREF_TEXT_FIX_MODEL, R.string.text_fix_model) { setting ->
         val providerPref by rememberStringPreferenceState(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER)
@@ -123,7 +139,7 @@ fun createTextFixSettings(context: Context) = listOf(
         )
     },
     Setting(context, Settings.PREF_TEXT_FIX_2_ENABLED, R.string.text_fix_2_enabled, R.string.text_fix_2_enabled_summary) {
-        SwitchPreference(it, Defaults.PREF_TEXT_FIX_2_ENABLED)
+        TextFixEnableSwitch(it, Defaults.PREF_TEXT_FIX_2_ENABLED)
     },
     Setting(context, Settings.PREF_TEXT_FIX_2_PROMPT, R.string.text_fix_2_prompt, R.string.text_fix_2_prompt_summary) {
         val prefs = LocalContext.current.prefs()

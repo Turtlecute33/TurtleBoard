@@ -120,11 +120,11 @@ open class SettingsActivity : ComponentActivity(), SharedPreferences.OnSharedPre
                             WelcomeWizard(close = { showWelcomeWizard = false }, finish = this::finish)
                         } else if (crashReports.isNotEmpty()) {
                             ConfirmationDialog(
-                                cancelButtonText = "ignore",
+                                cancelButtonText = stringResource(R.string.crash_report_ignore),
                                 onDismissRequest = { crashReportFiles.value = emptyList() },
-                                neutralButtonText = "delete",
+                                neutralButtonText = stringResource(R.string.crash_report_delete),
                                 onNeutral = { crashReports.forEach { it.delete() }; crashReportFiles.value = emptyList() },
-                                confirmButtonText = "get",
+                                confirmButtonText = stringResource(R.string.crash_report_save),
                                 onConfirmed = {
                                     val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
                                     intent.addCategory(Intent.CATEGORY_OPENABLE)
@@ -132,7 +132,7 @@ open class SettingsActivity : ComponentActivity(), SharedPreferences.OnSharedPre
                                     intent.type = "application/zip"
                                     crashFilePicker.launch(intent)
                                 },
-                                content = { Text("Crash report files found") },
+                                content = { Text(stringResource(R.string.crash_report_found)) },
                             )
                         } else if (BuildConfig.ENABLE_GESTURE_DATA_GATHERING
                             && JniUtils.sHaveGestureLib

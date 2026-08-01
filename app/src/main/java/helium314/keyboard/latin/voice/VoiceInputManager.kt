@@ -62,9 +62,12 @@ class VoiceInputManager(
             incognitoModeEnabled: Boolean,
             imeOptions: Int,
         ): Int? {
+            // TYPE_TEXT_FLAG_NO_SUGGESTIONS is deliberately NOT treated as a privacy signal. Apps
+            // set it on ordinary prose fields (chat composers, search boxes) purely to suppress the
+            // suggestion strip, so blocking on it made voice input unusable across a lot of apps
+            // while protecting nothing: the real signals are the ones checked here.
             if (isPasswordField || noLearning || incognitoModeEnabled ||
-                (imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0 ||
-                (inputType and InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) != 0
+                (imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0
             ) {
                 return R.string.voice_error_sensitive_field
             }
@@ -113,6 +116,15 @@ class VoiceInputManager(
     @Volatile private var currentUseDedicatedStt = false
 
     fun getState() = state
+
+    /**
+     * True only while the microphone is actually open and a stop hasn't been requested yet.
+     *
+     * Deliberately false during the post-stop WAV finalize window. [state] stays [State.RECORDING]
+     * until the recorder drains, but [stopRecording] is already a no-op there, so callers that
+     * "stop recording instead of typing" would swallow the keystroke and achieve nothing.
+     */
+    fun isCapturing(): Boolean = state == State.RECORDING && !isStopFinalizing
 
     /** Exposed so UI can render a live amplitude meter. */
     fun getCurrentAmplitude(): Double = audioRecorder.currentAmplitude
@@ -339,6 +351,8 @@ class VoiceInputManager(
             callbacks.onError(context.getString(R.string.voice_error_no_model))
             return
         }
+        warnIfZeroDataRetentionUnenforceable(context, provider, model, useZdr)
+        if (polishModel != null) warnIfZeroDataRetentionUnenforceable(context, provider, polishModel, useZdr)
         val localeHint = if (languageHintEnabled) callbacks.getLocaleHint() else null
         val prompt = resolveVoicePrompt(savedPrompt, localeHint, transcriptionDictionary, expectedLanguages)
         val spacingContext = if (spaceHeuristicEnabled) callbacks.getSpacingContext() else null

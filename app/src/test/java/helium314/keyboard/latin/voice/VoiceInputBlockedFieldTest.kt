@@ -43,11 +43,27 @@ class VoiceInputBlockedFieldTest {
     fun editorPrivacyFlagsAreSensitive() {
         assertEquals(
             R.string.voice_error_sensitive_field,
-            call(inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS),
+            call(imeOptions = EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING),
         )
+    }
+
+    /**
+     * Apps set NO_SUGGESTIONS on ordinary chat and search fields just to hide the suggestion strip.
+     * It carries no privacy meaning, so it must not block voice input on its own.
+     */
+    @Test
+    fun textNoSuggestionsFlagAloneIsAllowed() {
+        assertNull(call(inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS))
+    }
+
+    @Test
+    fun noSuggestionsStillBlockedWhenARealPrivacySignalIsPresent() {
         assertEquals(
             R.string.voice_error_sensitive_field,
-            call(imeOptions = EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING),
+            call(
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS,
+                incognitoModeEnabled = true,
+            ),
         )
     }
 

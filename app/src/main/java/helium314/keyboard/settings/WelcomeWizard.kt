@@ -114,12 +114,29 @@ fun WelcomeWizard(
         isAiProviderReady() || aiSetupSkipped -> doneStep
         else -> providerStep
     }
+
+    /**
+     * Re-evaluates the step after the user has been outside the app.
+     *
+     * The IME enable/switch gates genuinely need re-checking (the user changes those in system
+     * settings), and once they're satisfied we push forward out of those steps. But past that point
+     * the user is driving: recomputing from scratch collapsed the API-key, language and voice steps
+     * back to the provider step every single resume, because [isAiProviderReady] isn't true until
+     * the whole flow is finished. Leaving to a browser to fetch an API key and coming back is the
+     * common case, and it used to lose your place.
+     */
+    fun refreshStep(current: Int): Int = when {
+        !UncachedInputMethodManagerUtils.isThisImeEnabled(ctx, imm) -> welcomeStep
+        !UncachedInputMethodManagerUtils.isThisImeCurrent(ctx, imm) -> switchStep
+        current <= switchStep -> determineStep()
+        else -> current
+    }
     var step by rememberSaveable { mutableIntStateOf(determineStep()) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(ctx, imm, lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                step = determineStep()
+                step = refreshStep(step)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -130,7 +147,7 @@ fun WelcomeWizard(
     DisposableEffect(ctx, imm) {
         val inputMethodObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) {
-                step = determineStep()
+                step = refreshStep(step)
             }
         }
         ctx.contentResolver.registerContentObserver(

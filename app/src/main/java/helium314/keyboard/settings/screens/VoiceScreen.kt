@@ -6,6 +6,7 @@ import android.content.Context
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -16,8 +17,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.content.edit
 import helium314.keyboard.keyboard.KeyboardSwitcher
@@ -469,10 +474,31 @@ fun createVoiceSettings(context: Context) = listOf(
 @Composable
 private fun VoiceApiKeyPreference(setting: Setting, provider: AiProvider) {
     val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
     var showDialog by rememberSaveable { mutableStateOf(false) }
     var storedLength by remember {
         mutableIntStateOf(SecretStore.getApiKey(ctx, provider.apiKeyPrefKey(), provider.defaultApiKey()).length)
     }
+
+    /**
+     * Persists the key off the main thread. `SecretStore.setApiKey` does a synchronous
+     * `commit()` into EncryptedSharedPreferences, which means a disk write plus an AndroidKeyStore
+     * round trip — hundreds of milliseconds on some devices, and it was landing on the UI thread.
+     * The optimistic length update keeps the masked row in sync immediately either way.
+     */
+    fun saveApiKey(key: String) {
+        storedLength = key.length
+        scope.launch {
+            val failed = withContext(Dispatchers.IO) {
+                runCatching { SecretStore.setApiKey(ctx, provider.apiKeyPrefKey(), key) }.isFailure
+            }
+            if (failed) {
+                Toast.makeText(ctx, R.string.voice_error_secure_storage_unavailable, Toast.LENGTH_SHORT).show()
+                storedLength = SecretStore.getApiKey(ctx, provider.apiKeyPrefKey(), provider.defaultApiKey()).length
+            }
+        }
+    }
+
     Preference(
         name = setting.title,
         onClick = {
@@ -488,13 +514,22 @@ private fun VoiceApiKeyPreference(setting: Setting, provider: AiProvider) {
         description = if (storedLength > 0) "•".repeat(storedLength.coerceIn(8, 24)) else setting.description,
     )
     if (showDialog) {
+        val hasStoredKey = storedLength > 0
         TextInputDialog(
             onDismissRequest = { showDialog = false },
-            onConfirmed = {
-                SecretStore.setApiKey(ctx, provider.apiKeyPrefKey(), it.trim())
-                storedLength = it.trim().length
-            },
-            initialText = SecretStore.getApiKey(ctx, provider.apiKeyPrefKey(), provider.defaultApiKey()),
+            onConfirmed = { saveApiKey(it.trim()) },
+            // Deliberately not prefilled with the stored key. Loading the secret into an editable
+            // field means anyone who can open Settings can read it back, and it puts the key in one
+            // more place in memory for no benefit — you don't need to see a key to replace it.
+            // Confirm stays disabled while the field is empty (checkTextValid defaults to
+            // isNotBlank), so an untouched dialog can't wipe a working key; removing one is the
+            // explicit neutral button below.
+            initialText = "",
+            description = if (hasStoredKey) {
+                { Text(stringResource(R.string.voice_api_key_replace_hint)) }
+            } else null,
+            neutralButtonText = if (hasStoredKey) stringResource(R.string.voice_api_key_remove) else null,
+            onNeutral = { saveApiKey("") },
             title = { Text(setting.title) },
             singleLine = true,
             isPassword = true,
@@ -705,9 +740,19 @@ private fun VoiceTestKeyPreference(setting: Setting) {
     // busy=true would leave the UI stuck. rememberCoroutineScope() cancels on dispose, which
     // is enough to abandon the in-flight request on navigation.
     var busy by remember { mutableStateOf(false) }
+    // The outcome used to be a toast only, which is easy to miss and gone a few seconds later —
+    // leaving no way to tell whether the key was ever validated. Keep it under the row as well.
+    var lastResult by remember { mutableStateOf<TestResult?>(null) }
     Preference(
         name = setting.title,
-        description = if (busy) stringResource(R.string.voice_test_key_testing) else null,
+        description = when {
+            busy -> stringResource(R.string.voice_test_key_testing)
+            lastResult != null -> stringResource(lastResult!!.messageRes)
+            else -> setting.description
+        },
+        // Announce the result to screen readers when it lands, rather than leaving them to
+        // rediscover the row.
+        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
         onClick = {
             if (busy) return@Preference
             if (!SecretStore.isSecureStorageAvailable(ctx)) {
@@ -730,23 +775,24 @@ private fun VoiceTestKeyPreference(setting: Setting) {
             val useZdr = provider == AiProvider.OPENROUTER &&
                 prefs.getBoolean(Settings.PREF_OPENROUTER_ZDR_ENABLED, Defaults.PREF_OPENROUTER_ZDR_ENABLED)
             busy = true
+            lastResult = null
             scope.launch {
                 val result = withContext(Dispatchers.IO) { probeApiKey(provider, apiKey, model, useZdr) }
-                val msgRes = when (result) {
-                    TestResult.OK -> R.string.voice_test_key_success
-                    TestResult.OK_ZDR_UNAVAILABLE -> R.string.voice_test_key_success_zdr_unavailable
-                    TestResult.INVALID -> R.string.voice_test_key_invalid
-                    TestResult.INVALID_MODEL -> R.string.voice_test_key_invalid_model
-                    TestResult.NETWORK -> R.string.voice_test_key_network_error
-                }
-                Toast.makeText(ctx, msgRes, Toast.LENGTH_SHORT).show()
+                Toast.makeText(ctx, result.messageRes, Toast.LENGTH_SHORT).show()
+                lastResult = result
                 busy = false
             }
         }
     )
 }
 
-private enum class TestResult { OK, OK_ZDR_UNAVAILABLE, INVALID, INVALID_MODEL, NETWORK }
+private enum class TestResult(@StringRes val messageRes: Int) {
+    OK(R.string.voice_test_key_success),
+    OK_ZDR_UNAVAILABLE(R.string.voice_test_key_success_zdr_unavailable),
+    INVALID(R.string.voice_test_key_invalid),
+    INVALID_MODEL(R.string.voice_test_key_invalid_model),
+    NETWORK(R.string.voice_test_key_network_error),
+}
 
 private fun probeApiKey(provider: AiProvider, apiKey: String, model: String, useZdr: Boolean): TestResult {
     if (provider == AiProvider.PAYPERQ) return probePayPerQApiKey(apiKey, model)

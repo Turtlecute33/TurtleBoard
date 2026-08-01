@@ -147,6 +147,12 @@ public class LatinIME extends InputMethodService implements
     private TextFixManager mTextFixManager;
     private String mPendingTextFixOriginal;
     private String mPendingTextFixProposed;
+    /**
+     * Identity of the editor a voice recording was started against, or null when there is nothing
+     * in flight. Compared against the current editor before a transcription is inserted so audio
+     * dictated into one field can never land in another.
+     */
+    private String mVoiceTargetEditorId;
     private final android.os.Handler mTextFixOverlayHandler =
             new android.os.Handler(android.os.Looper.getMainLooper());
     private Runnable mTextFixErrorOverlayHideRunnable;
@@ -318,6 +324,11 @@ public class LatinIME extends InputMethodService implements
 
         public void postUpdateSuggestionStrip(final int inputStyle) {
             final int updateSequenceNumber = ++mSuggestionStripSequenceNumber;
+            // Drop any older pending update before enqueuing this one. Without this, typing faster
+            // than the debounce delay leaves several messages queued: the oldest one fires first,
+            // removes the newer ones (see MSG_UPDATE_SUGGESTION_STRIP), then discards itself on the
+            // sequence check — so the strip stops updating until some other event kicks it.
+            removeMessages(MSG_UPDATE_SUGGESTION_STRIP);
             sendMessageDelayed(obtainMessage(MSG_UPDATE_SUGGESTION_STRIP, inputStyle,
                     updateSequenceNumber), mDelayInMillisecondsToUpdateSuggestions);
         }
@@ -630,6 +641,7 @@ public class LatinIME extends InputMethodService implements
 
             @Override
             public void onRecordingStarted() {
+                mVoiceTargetEditorId = currentEditorIdentity();
                 if (isVoiceHapticEnabled()) AudioAndHapticFeedbackManager.getInstance().vibrate(25L);
                 if (mSuggestionStripView != null) {
                     mSuggestionStripView.setVoiceTelemetryProvider(() ->
@@ -655,6 +667,26 @@ public class LatinIME extends InputMethodService implements
 
             @Override
             public void onTranscriptionResult(@NonNull final String text) {
+                // Everything below re-validates the destination. The sensitive-field and
+                // supported-field checks ran when recording started, but insertion targets whatever
+                // InputConnection is current *now* — and focus can move to another field, including
+                // a password box, while the upload is in flight. Committing blind there would leak
+                // dictated text into a field the user never authorised, so drop it instead.
+                final String target = mVoiceTargetEditorId;
+                mVoiceTargetEditorId = null;
+                final String current = currentEditorIdentity();
+                if (target == null || current == null || !target.equals(current)) {
+                    Log.i(TAG, "Discarding transcription: editor changed since recording started");
+                    Toast.makeText(LatinIME.this, R.string.voice_error_field_changed,
+                            Toast.LENGTH_LONG).show();
+                    return;
+                }
+                final Integer blocked = getBlockedErrorResId();
+                if (blocked != null) {
+                    Log.i(TAG, "Discarding transcription: editor no longer accepts voice input");
+                    Toast.makeText(LatinIME.this, blocked, Toast.LENGTH_LONG).show();
+                    return;
+                }
                 if (isVoiceHapticEnabled())
                     AudioAndHapticFeedbackManager.getInstance().vibrateVoiceSuccess();
                 onTextInput(text);
@@ -816,6 +848,18 @@ public class LatinIME extends InputMethodService implements
 
     private void discardTextFix() {
         clearPendingTextFixState();
+    }
+
+    /**
+     * A stable-enough fingerprint of the focused editor: package, view id and input type. All three
+     * survive a configuration change (so rotating mid-transcription still inserts), while a move to
+     * a different field or a different app changes at least one of them.
+     */
+    @Nullable
+    private String currentEditorIdentity() {
+        final EditorInfo editorInfo = getCurrentInputEditorInfo();
+        if (editorInfo == null) return null;
+        return editorInfo.packageName + '/' + editorInfo.fieldId + '/' + editorInfo.inputType;
     }
 
     private void clearPendingTextFixState() {
@@ -1117,7 +1161,6 @@ public class LatinIME extends InputMethodService implements
 
     void onStartInputViewInternal(final EditorInfo editorInfo, final boolean restarting) {
         super.onStartInputView(editorInfo, restarting);
-        clearPendingTextFixState();
 
         if (BuildConfig.ENABLE_GESTURE_DATA_GATHERING
                 && GestureDataGatheringKt.isInActiveGatheringMode(editorInfo)) {
@@ -1173,6 +1216,15 @@ public class LatinIME extends InputMethodService implements
 
         final boolean inputTypeChanged = !currentSettingsValues.isSameInputType(editorInfo);
         final boolean isDifferentTextField = !restarting || inputTypeChanged;
+
+        // Only drop a pending Text Fix when the editor actually changed. This used to run
+        // unconditionally at the top of the method, which meant a rotation — or any same-field
+        // restart the host triggers — cancelled an in-flight request and threw away a proposal the
+        // user was still looking at. Keeping it is safe because commitTextFixReplacement re-checks
+        // that the selection still matches before replacing anything.
+        if (isDifferentTextField) {
+            clearPendingTextFixState();
+        }
 
         StatsUtils.onStartInputView(editorInfo.inputType,
                 Settings.getValues().mDisplayOrientation,
@@ -1300,6 +1352,11 @@ public class LatinIME extends InputMethodService implements
         super.onFinishInput();
         Log.i(TAG, "onFinishInput");
 
+        // Defence in depth alongside onFinishInputViewInternal: input can finish without the view
+        // finishing (older Android versions, and the pending-IMS-callback coalescing window can
+        // swallow onFinishInputView entirely). Leaving a recording running past the end of input
+        // risks uploading audio for an editor that no longer exists.
+        cancelVoiceRecordingIfCapturing();
         clearPendingTextFixState();
         mDictionaryFacilitator.onFinishInput();
         final MainKeyboardView mainKeyboardView = mKeyboardSwitcher.getMainKeyboardView();
@@ -1683,23 +1740,35 @@ public class LatinIME extends InputMethodService implements
     public void onEvent(@NonNull final Event event) {
         if (KeyCode.VOICE_INPUT == event.getKeyCode() || KeyCode.VOICE_STT_INPUT == event.getKeyCode()) {
             if (mVoiceInputManager != null) {
-                if (mVoiceInputManager.getState() == VoiceInputManager.State.RECORDING) {
-                    mVoiceInputManager.stopRecording();
-                } else {
-                    mVoiceInputManager.startRecording(KeyCode.VOICE_STT_INPUT == event.getKeyCode());
+                switch (mVoiceInputManager.getState()) {
+                    case RECORDING -> mVoiceInputManager.stopRecording();
+                    // Tapping the mic again during upload reads as "never mind". This used to be a
+                    // dead key: startRecording() bailed out because the state wasn't IDLE, leaving
+                    // the overlay's Cancel button as the only way out — and that button isn't
+                    // reachable at all when the toolbar is hidden.
+                    case TRANSCRIBING -> mVoiceInputManager.cancelRecording();
+                    // Voice and Text Fix both take over the suggestion strip, so make them mutually
+                    // exclusive rather than letting the second one stomp the first one's overlay.
+                    case IDLE -> {
+                        clearPendingTextFixState();
+                        mVoiceInputManager.startRecording(KeyCode.VOICE_STT_INPUT == event.getKeyCode());
+                    }
                 }
             }
             return;
         }
-        if (KeyCode.TEXT_FIX == event.getKeyCode()) {
-            if (mTextFixManager != null && mTextFixManager.getState() == TextFixManager.State.IDLE) {
-                mTextFixManager.startTextFix(TextFixManager.Variant.PRIMARY);
-            }
-            return;
-        }
-        if (KeyCode.TEXT_FIX_2 == event.getKeyCode()) {
-            if (mTextFixManager != null && mTextFixManager.getState() == TextFixManager.State.IDLE) {
-                mTextFixManager.startTextFix(TextFixManager.Variant.SECONDARY);
+        if (KeyCode.TEXT_FIX == event.getKeyCode() || KeyCode.TEXT_FIX_2 == event.getKeyCode()) {
+            if (mTextFixManager != null) {
+                final boolean wasWorking = mTextFixManager.getState() == TextFixManager.State.WORKING;
+                // Cancels an in-flight request and clears any proposal still on screen. The latter
+                // matters even when starting fresh: a previous proposal left in place would still be
+                // committed by Replace if this new request failed.
+                clearPendingTextFixState();
+                if (!wasWorking) {
+                    cancelVoiceRecordingIfCapturing();
+                    mTextFixManager.startTextFix(KeyCode.TEXT_FIX_2 == event.getKeyCode()
+                            ? TextFixManager.Variant.SECONDARY : TextFixManager.Variant.PRIMARY);
+                }
             }
             return;
         }
@@ -2149,15 +2218,21 @@ public class LatinIME extends InputMethodService implements
         }
     }
 
+    /**
+     * True while the microphone is open, so a key press should stop recording rather than type.
+     * Excludes the post-stop finalize window: the stop is already under way there, and reporting
+     * true would make {@link helium314.keyboard.keyboard.KeyboardActionListenerImpl} discard the
+     * key press without any recording left to stop.
+     */
     public boolean isVoiceRecording() {
-        return mVoiceInputManager != null
-            && mVoiceInputManager.getState() == VoiceInputManager.State.RECORDING;
+        return mVoiceInputManager != null && mVoiceInputManager.isCapturing();
     }
 
     private void cancelVoiceRecordingIfCapturing() {
         // Also abort an in-flight upload: when the user dismisses the keyboard mid-transcription
         // (Back key, app switch, finishInputView), they expect the network request to stop, not
         // to insert text into a stale field a few seconds later.
+        mVoiceTargetEditorId = null;
         if (mVoiceInputManager != null
                 && mVoiceInputManager.getState() != VoiceInputManager.State.IDLE) {
             mVoiceInputManager.cancelRecording();

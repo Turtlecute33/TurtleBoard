@@ -35,14 +35,33 @@ class SettingsContainer(context: Context) {
     //  show, but change will not do anything because another setting needs to be enabled first -> probably best
     fun filter(searchTerm: String): List<Setting> {
         val term = searchTerm.lowercase()
-        val results = mutableSetOf<Setting>()
-        list.forEach { setting -> if (setting.title.lowercase().startsWith(term)) results.add(setting) }
-        list.forEach { setting -> if (setting.title.lowercase().split(' ').any { it.startsWith(term) }) results.add(setting) }
-        list.forEach { setting ->
-            if (setting.description?.lowercase()?.split(' ')?.any { it.startsWith(term) } == true)
-                results.add(setting)
+
+        // Lower rank sorts first: whole-title prefix, then any title word, then any description
+        // word, then anywhere in the title, then anywhere in the description. Those last two are
+        // what make a term like "ZDR" findable at all — it only ever occurs bracketed or
+        // hyphenated inside a longer token, so word-prefix matching alone could never surface it.
+        fun rank(setting: Setting): Int {
+            val title = setting.title.lowercase()
+            val description = setting.description?.lowercase()
+            return when {
+                title.startsWith(term) -> 0
+                title.split(' ').any { it.startsWith(term) } -> 1
+                description?.split(' ')?.any { it.startsWith(term) } == true -> 2
+                term in title -> 3
+                description?.contains(term) == true -> 4
+                else -> NO_MATCH
+            }
         }
-        return results.toList()
+
+        // sortedBy is stable, so settings sharing a rank keep their declaration order.
+        return list.map { it to rank(it) }
+            .filter { it.second != NO_MATCH }
+            .sortedBy { it.second }
+            .map { it.first }
+    }
+
+    companion object {
+        private const val NO_MATCH = Int.MAX_VALUE
     }
 }
 

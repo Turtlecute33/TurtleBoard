@@ -39,6 +39,14 @@ class OpenRouterClient(
 ) {
     @Volatile private var activeConnection: HttpURLConnection? = null
 
+    /**
+     * Set by [cancel] before the connection is torn down. Disconnecting an in-flight request
+     * surfaces as a plain [java.io.IOException], which the retry policy would otherwise treat as a
+     * transient network fault and answer by re-uploading the whole recording. Checked on every
+     * retry decision and inside the upload loops so a cancelled request stops sending audio.
+     */
+    @Volatile private var cancelled = false
+
     companion object {
         private const val TAG = "OpenRouterClient"
         const val API_BASE = "https://openrouter.ai/api/v1"
@@ -105,7 +113,14 @@ class OpenRouterClient(
         }
     }
 
+    /**
+     * Aborts the in-flight request, if any. Safe to call from any thread. Once cancelled, this
+     * client will not start another attempt; the request thread observes [InterruptedException].
+     */
     fun cancel() {
+        // Order matters: the flag must be visible before the disconnect wakes the request thread
+        // up with an IOException, otherwise that thread can decide to retry before it sees it.
+        cancelled = true
         activeConnection?.disconnect()
     }
 
@@ -130,10 +145,12 @@ class OpenRouterClient(
         val enforceZdr = useZeroDataRetention
         var attempt = 0
         while (attempt < MAX_ATTEMPTS) {
+            if (cancelled) throw InterruptedException()
             if (Thread.currentThread().isInterrupted) throw InterruptedException()
             try {
                 return request()
             } catch (e: OpenRouterException) {
+                if (cancelled) throw InterruptedException()
                 if (provider == AiProvider.OPENROUTER && enforceZdr && e.isZdrRouteUnavailable()) {
                     throw OpenRouterException(
                         "No zero data retention route is available for this model",
@@ -146,12 +163,16 @@ class OpenRouterClient(
                 lastError = e
                 nextDelayOverrideMs = if ((e.statusCode == 429 || e.statusCode == 503) && e.retryAfterMs > 0) e.retryAfterMs else -1L
             } catch (e: SocketTimeoutException) {
+                if (cancelled) throw InterruptedException()
                 if (attempt == MAX_ATTEMPTS - 1) throw OpenRouterException("Request timed out")
                 lastError = e
                 nextDelayOverrideMs = -1L
             } catch (e: InterruptedIOException) {
                 throw InterruptedException()
             } catch (e: java.io.IOException) {
+                // A user-initiated cancel lands here (disconnect closes the socket). Retrying would
+                // re-upload the audio the user just asked us to drop.
+                if (cancelled) throw InterruptedException()
                 // Never propagate the underlying IOException — on some Android stacks its message
                 // includes the full request URL plus headers (Authorization: Bearer …). We throw a
                 // bare OpenRouterException with no cause attached on purpose; do NOT pass `cause = e`
@@ -454,6 +475,7 @@ class OpenRouterClient(
         FileInputStream(file).use { input ->
             val buffer = ByteArray(8 * 1024)
             while (true) {
+                if (cancelled) throw InterruptedException()
                 if (Thread.currentThread().isInterrupted) throw InterruptedException()
                 val read = input.read(buffer)
                 if (read == -1) break
@@ -532,21 +554,38 @@ class OpenRouterClient(
     }
 
     /**
-     * Reads [audioFile] in 48 KiB chunks (multiple of 3 for padding-free base64) and
+     * Reads [audioFile] in 48 KiB blocks (multiple of 3 for padding-free base64) and
      * writes the encoded bytes straight to [out], avoiding any full-body buffer.
      */
     private fun streamBase64Audio(audioFile: File, out: OutputStream) {
+        FileInputStream(audioFile).use { fis -> encodeBase64Stream(fis, out) }
+    }
+
+    /**
+     * Base64-encodes [input] into [out] in a streaming fashion.
+     *
+     * Only complete [AUDIO_READ_CHUNK]-sized blocks are encoded mid-stream. `InputStream.read` is
+     * allowed to return fewer bytes than requested, and encoding a chunk whose length is not a
+     * multiple of 3 emits `=` padding — mid-stream that padding lands inside the JSON string and
+     * corrupts the request body (intermittent 400s). So we accumulate short reads until the block
+     * is full and only let the trailing partial block pad, which is exactly where padding belongs.
+     */
+    @VisibleForTesting
+    internal fun encodeBase64Stream(input: java.io.InputStream, out: OutputStream) {
         val buf = ByteArray(AUDIO_READ_CHUNK)
-        FileInputStream(audioFile).use { fis ->
-            while (true) {
-                if (Thread.currentThread().isInterrupted) throw InterruptedException()
-                val n = fis.read(buf)
-                if (n == -1) break
-                // AUDIO_READ_CHUNK is a multiple of 3, so intermediate reads produce padding-free
-                // base64. The final (short) read may include padding, which is valid at the end.
-                out.write(Base64.encode(buf, 0, n, Base64.NO_WRAP))
+        var filled = 0
+        while (true) {
+            if (cancelled) throw InterruptedException()
+            if (Thread.currentThread().isInterrupted) throw InterruptedException()
+            val n = input.read(buf, filled, buf.size - filled)
+            if (n == -1) break
+            filled += n
+            if (filled == buf.size) {
+                out.write(Base64.encode(buf, 0, filled, Base64.NO_WRAP))
+                filled = 0
             }
         }
+        if (filled > 0) out.write(Base64.encode(buf, 0, filled, Base64.NO_WRAP))
     }
 
     private fun readCappedString(input: java.io.InputStream, maxBytes: Long): String {

@@ -5,11 +5,14 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
+import android.widget.Toast
 import androidx.annotation.StringRes
 import helium314.keyboard.latin.R
 import helium314.keyboard.latin.settings.Defaults
 import java.text.BreakIterator
+import java.util.Collections
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 private val SANITIZE_OUTPUT_REGEX =
     Regex("[[\\p{Cc}&&[^\\n\\r\\t]]\\u200B\\u200C\\u200E\\u200F\\u202A-\\u202E\\u2066-\\u2069\\uFEFF]")
@@ -91,6 +94,36 @@ internal fun safeUserFacingError(context: Context, e: Throwable, @StringRes fall
         }
     }
     return context.getString(fallbackResId)
+}
+
+/**
+ * Models already reported as lacking a verified ZDR route, so the disclosure below fires once per
+ * model per process instead of on every request.
+ */
+private val zdrWarnedModels: MutableSet<String> =
+    Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+
+/**
+ * ZDR enforcement is best-effort: [OpenRouterClient] only sends `provider.zdr: true` for catalog
+ * models with a verified zero-data-retention route, and proceeds without it for anything else
+ * (including custom slugs it can't classify). Downgrading silently would leave the user believing
+ * their audio was covered by a no-retention contract when it wasn't, so say so — once per model,
+ * and without blocking the request.
+ */
+internal fun warnIfZeroDataRetentionUnenforceable(
+    context: Context,
+    provider: AiProvider,
+    model: String,
+    useZeroDataRetention: Boolean,
+) {
+    if (!useZeroDataRetention || provider != AiProvider.OPENROUTER) return
+    if (ModelCatalog.openRouterSupportsZdr(model)) return
+    if (!zdrWarnedModels.add(model)) return
+    Toast.makeText(
+        context,
+        context.getString(R.string.voice_warning_zdr_unenforceable, model),
+        Toast.LENGTH_LONG,
+    ).show()
 }
 
 internal fun isNetworkAvailable(context: Context): Boolean {

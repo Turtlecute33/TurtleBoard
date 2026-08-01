@@ -11,6 +11,7 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import helium314.keyboard.latin.R
+import kotlin.reflect.KMutableProperty0
 
 /**
  * Overlay shown in the suggestion strip during a text-fix round-trip.
@@ -28,7 +29,8 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
 
     var onReplaceClick: (() -> Unit)? = null
     var onDiscardClick: (() -> Unit)? = null
-    private var lastClickMs = 0L
+    private var lastReplaceClickMs = 0L
+    private var lastDiscardClickMs = 0L
 
     init {
         orientation = HORIZONTAL
@@ -51,8 +53,12 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
                 marginEnd = dp(12)
             }
         }
-        discardButton = makePillButton(R.string.text_fix_discard, isPrimary = false) { debounceClick { onDiscardClick?.invoke() } }
-        replaceButton = makePillButton(R.string.text_fix_replace, isPrimary = true) { debounceClick { onReplaceClick?.invoke() } }
+        discardButton = makePillButton(R.string.text_fix_discard, isPrimary = false) {
+            debounceClick(::lastDiscardClickMs) { onDiscardClick?.invoke() }
+        }
+        replaceButton = makePillButton(R.string.text_fix_replace, isPrimary = true) {
+            debounceClick(::lastReplaceClickMs) { onReplaceClick?.invoke() }
+        }
 
         addView(statusText)
         addView(resultText)
@@ -126,12 +132,14 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
         announceForAccessibility(message)
     }
 
-    private inline fun debounceClick(action: () -> Unit) {
+    private fun debounceClick(lastClickMs: KMutableProperty0<Long>, action: () -> Unit) {
         // Replace and Discard both mutate persistent state (cancelling an in-flight request or
         // committing a text replacement). A double-tap should never fire the callback twice.
+        // The window is per-button: a shared one let a tap on Replace swallow a deliberate tap on
+        // Discard moments later, which is a different action, not a double-tap.
         val now = SystemClock.elapsedRealtime()
-        if (now - lastClickMs < 300L) return
-        lastClickMs = now
+        if (now - lastClickMs.get() < 300L) return
+        lastClickMs.set(now)
         action()
     }
 

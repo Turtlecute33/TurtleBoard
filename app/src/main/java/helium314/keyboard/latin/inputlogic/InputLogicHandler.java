@@ -65,7 +65,9 @@ class InputLogicHandler implements Handler.Callback {
     }
 
     public boolean isInBatchInput() {
-        return mInBatchInput;
+        synchronized (mLock) {
+            return mInBatchInput;
+        }
     }
 
     /**
@@ -111,7 +113,14 @@ class InputLogicHandler implements Handler.Callback {
         }
         mLatinIMEHandler.showGesturePreviewAndSetSuggestions(suggestedWordsToShowSuggestions, isTailBatchInput);
         if (isTailBatchInput) {
-            mInBatchInput = false;
+            // This runs on the non-UI thread (we're inside the getSuggestedWords callback), so the
+            // write has to take mLock like every other access to mInBatchInput — otherwise it races
+            // the UI thread's check-then-act in updateBatchInput. Taking the lock here cannot
+            // deadlock: getSuggestedWords only posts a message, so the UI thread never blocks while
+            // holding mLock.
+            synchronized (mLock) {
+                mInBatchInput = false;
+            }
             // The following call schedules onEndBatchInputInternal
             // to be called on the UI thread.
             mLatinIMEHandler.showTailBatchInputResult(suggestedWordsToShowSuggestions);

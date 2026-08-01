@@ -32,6 +32,7 @@ import helium314.keyboard.settings.dialogs.ConfirmationDialog
 import helium314.keyboard.settings.dialogs.InfoDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun BackgroundImagePref(setting: Setting, isLandscape: Boolean) {
@@ -54,8 +55,10 @@ fun BackgroundImagePref(setting: Setting, isLandscape: Boolean) {
         showSelectionDialog = false
         showDayNightDialog = false
         scope.launch(Dispatchers.IO) {
-            if (!setBackgroundImage(ctx, uri, isNight, isLandscape))
-                showErrorDialog = true
+            val ok = setBackgroundImage(ctx, uri, isNight, isLandscape)
+            // Flip the dialog flag back on Main: writing Compose state from an IO dispatcher races
+            // with the snapshot the recomposer is reading and can drop the update entirely.
+            if (!ok) withContext(Dispatchers.Main) { showErrorDialog = true }
         }
     }
     val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)

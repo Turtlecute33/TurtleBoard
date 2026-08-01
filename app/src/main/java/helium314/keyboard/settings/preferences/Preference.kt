@@ -3,6 +3,7 @@ package helium314.keyboard.settings.preferences
 
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,6 +24,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.Hyphens
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -57,12 +59,27 @@ fun Preference(
     modifier: Modifier = Modifier,
     description: String? = null,
     @DrawableRes icon: Int? = null,
+    /**
+     * On/off state of the row, for preferences whose trailing [value] is a decorative `Switch`.
+     * When set, the row is exposed to accessibility services as a switch carrying this state, so
+     * TalkBack announces "on"/"off"; otherwise it is a plain clickable row and the state is
+     * invisible to screen readers, since a `Switch` with `onCheckedChange = null` contributes no
+     * semantics of its own.
+     */
+    switchState: Boolean? = null,
     value: @Composable (RowScope.() -> Unit)? = null,
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clickable { onClick() }
+            .then(
+                if (switchState == null) Modifier.clickable { onClick() }
+                else Modifier.toggleable(
+                    value = switchState,
+                    role = Role.Switch,
+                    onValueChange = { onClick() },
+                )
+            )
             .heightIn(min = 48.dp)
             .padding(vertical = 10.dp, horizontal = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),

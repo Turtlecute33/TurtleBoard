@@ -1159,6 +1159,24 @@ New dictionary:
     <string name="voice_error_rate_limited">AI provider rate limit reached — try again in a moment</string>
     <string name="voice_max_duration_reached">Maximum recording length reached — transcribing&#8230;</string>
     <string name="voice_error_secure_storage_unavailable">Secure storage is unavailable on this device</string>
+    <string name="voice_warning_zdr_unenforceable">Zero data retention can\'t be enforced for <xliff:g id="slug">%1$s</xliff:g>. Sending anyway — pick a model with the ZDR badge for a guaranteed no-retention route.</string>
+    <string name="voice_error_field_changed">Transcription discarded — the text field changed while it was being transcribed</string>
+    <!-- Badges shown next to AI models in the model picker -->
+    <string name="model_badge_default">Default</string>
+    <string name="model_badge_free">Free</string>
+    <string name="model_badge_cheap">Cheap</string>
+    <string name="model_badge_medium">Medium</string>
+    <string name="model_badge_expensive">Expensive</string>
+    <!-- Zero Data Retention: the provider does not store request data -->
+    <string name="model_badge_zdr">ZDR</string>
+    <string name="model_badge_cache">Cache</string>
+    <!-- Dialog offering to export crash reports left behind by a previous crash -->
+    <string name="crash_report_found">Crash report files found</string>
+    <string name="crash_report_ignore">Ignore</string>
+    <string name="crash_report_delete">Delete</string>
+    <string name="crash_report_save">Save</string>
+    <string name="voice_api_key_replace_hint">A key is already saved. Enter a new one to replace it.</string>
+    <string name="voice_api_key_remove">Remove key</string>
     <string name="voice_mic_rationale_title">Microphone access</string>
     <string name="voice_mic_rationale_message">WisprBoard records audio only while you hold the voice button. The recording is sent over HTTPS to your selected AI provider for transcription using the API key you supply; it is not proxied by any WisprBoard server. You can revoke microphone access at any time from Android\'s app settings.</string>
     <string name="voice_mic_rationale_confirm">Allow microphone</string>
