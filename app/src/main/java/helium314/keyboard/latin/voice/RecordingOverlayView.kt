@@ -47,7 +47,7 @@ class RecordingOverlayView(context: Context) : LinearLayout(context) {
         orientation = HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
-        setPadding(dp(12), dp(4), dp(12), dp(4))
+        setPadding(dp(12), 0, dp(12), 0)
 
         meterView = AmplitudeMeterView(context).apply {
             layoutParams = LayoutParams(dp(44), dp(20)).apply { marginEnd = dp(12) }
@@ -76,12 +76,12 @@ class RecordingOverlayView(context: Context) : LinearLayout(context) {
         addView(stopButton)
     }
 
-    // 32dp keeps the buttons inside the ~44dp suggestion strip with comfortable vertical
-    // breathing room; the 6dp sibling gap preserves separation without crowding the timer.
+    // The suggestion strip is at least 48dp tall, so these critical controls meet Android's
+    // minimum touch-target size without relying on a parent TouchDelegate.
     private fun makeRoundButton(isCancel: Boolean, descRes: Int, onClick: () -> Unit): ImageView {
-        val size = dp(32)
+        val size = dp(48)
         return ImageView(context).apply {
-            layoutParams = LayoutParams(size, size).apply { marginStart = dp(6) }
+            layoutParams = LayoutParams(size, size).apply { marginStart = dp(8) }
             val bg = GradientDrawable().apply { shape = GradientDrawable.OVAL }
             background = bg
             scaleType = ImageView.ScaleType.CENTER_INSIDE
@@ -92,7 +92,7 @@ class RecordingOverlayView(context: Context) : LinearLayout(context) {
                 setSize(innerSize, innerSize)
             }
             setImageDrawable(icon)
-            setPadding(dp(6), dp(6), dp(6), dp(6))
+            setPadding(dp(14), dp(14), dp(14), dp(14))
             isClickable = true
             isFocusable = true
             contentDescription = context.getString(descRes)

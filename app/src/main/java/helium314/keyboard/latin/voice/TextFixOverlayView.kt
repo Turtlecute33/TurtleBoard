@@ -36,7 +36,7 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
         orientation = HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
-        setPadding(dp(12), dp(4), dp(12), dp(4))
+        setPadding(dp(12), 0, dp(12), 0)
 
         statusText = TextView(context).apply {
             textSize = 13f
@@ -76,7 +76,7 @@ class TextFixOverlayView(context: Context) : LinearLayout(context) {
             isClickable = true
             isFocusable = true
             isAllCaps = false
-            minHeight = dp(36)
+            minHeight = dp(48)
             minWidth = dp(64)
             val bg = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE

@@ -233,6 +233,7 @@ internal fun parseSettingsSnapshot(list: List<String>): SettingsSnapshot {
             }
         }
         return SettingsSnapshot(booleans, ints, longs, floats, strings, stringSets)
+            .withoutSensitiveKeys()
     } catch (e: Exception) {
         throw IllegalArgumentException("Malformed settings backup", e)
     }
@@ -248,13 +249,24 @@ internal data class SettingsSnapshot(
 )
 
 private fun SharedPreferences.Editor.putAll(snapshot: SettingsSnapshot) {
-    snapshot.booleans.forEach { putBoolean(it.key, it.value) }
-    snapshot.ints.forEach { putInt(it.key, it.value) }
-    snapshot.longs.forEach { putLong(it.key, it.value) }
-    snapshot.floats.forEach { putFloat(it.key, it.value) }
-    snapshot.strings.forEach { putString(it.key, it.value) }
-    snapshot.stringSets.forEach { putStringSet(it.key, it.value) }
+    snapshot.withoutSensitiveKeys().run {
+        booleans.forEach { putBoolean(it.key, it.value) }
+        ints.forEach { putInt(it.key, it.value) }
+        longs.forEach { putLong(it.key, it.value) }
+        floats.forEach { putFloat(it.key, it.value) }
+        strings.forEach { putString(it.key, it.value) }
+        stringSets.forEach { putStringSet(it.key, it.value) }
+    }
 }
+
+private fun SettingsSnapshot.withoutSensitiveKeys() = SettingsSnapshot(
+    booleans = booleans.filterKeys { it !in SENSITIVE_BACKUP_KEYS },
+    ints = ints.filterKeys { it !in SENSITIVE_BACKUP_KEYS },
+    longs = longs.filterKeys { it !in SENSITIVE_BACKUP_KEYS },
+    floats = floats.filterKeys { it !in SENSITIVE_BACKUP_KEYS },
+    strings = strings.filterKeys { it !in SENSITIVE_BACKUP_KEYS },
+    stringSets = stringSets.filterKeys { it !in SENSITIVE_BACKUP_KEYS },
+)
 
 private data class BackupFiles(
     val files: List<File>,
@@ -356,6 +368,15 @@ private fun applyStagedBackup(ctx: android.content.Context, backup: StagedBackup
                 clear()
                 putAll(snapshot)
             }
+        }
+        // Old or hand-crafted backups may contain provider keys in either plaintext prefs file.
+        // Scrub them even when an encrypted key already exists, since SecretStore then has no
+        // reason to run its one-time plaintext migration path.
+        ctx.prefs().edit(commit = true) {
+            SENSITIVE_BACKUP_KEYS.forEach { remove(it) }
+        }
+        ctx.protectedPrefs().edit(commit = true) {
+            SENSITIVE_BACKUP_KEYS.forEach { remove(it) }
         }
     } catch (t: Throwable) {
         restoreAllowedFiles(rollbackFilesDir, filesDir)

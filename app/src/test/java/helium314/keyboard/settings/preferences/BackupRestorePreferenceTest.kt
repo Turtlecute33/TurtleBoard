@@ -36,6 +36,24 @@ class BackupRestorePreferenceTest {
     }
 
     @Test
+    fun restoreSettingsRejectsSensitiveKeysFromLegacyOrCraftedBackup() {
+        val snapshot = parseSettingsSnapshot(
+            listOf(
+                "string settings",
+                """{"${Settings.PREF_OPENROUTER_API_KEY}":"secret","${Settings.PREF_PAYPERQ_API_KEY}":"secret-too","safe_string":"value"}""",
+                "string set settings",
+                """{"pinned_clips":["private clip"],"safe_set":["entry"]}""",
+            )
+        )
+
+        assertFalse(snapshot.strings.containsKey(Settings.PREF_OPENROUTER_API_KEY))
+        assertFalse(snapshot.strings.containsKey(Settings.PREF_PAYPERQ_API_KEY))
+        assertFalse(snapshot.stringSets.containsKey("pinned_clips"))
+        assertEquals("value", snapshot.strings["safe_string"])
+        assertEquals(setOf("entry"), snapshot.stringSets["safe_set"])
+    }
+
+    @Test
     fun backupFileAllowlistExcludesLearnedAndHistoryData() {
         assertTrue(isAllowedBackupFile("blacklists/example.txt"))
         assertTrue(isAllowedBackupFile("custom_background_image.jpg"))

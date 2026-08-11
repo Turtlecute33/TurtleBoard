@@ -17,6 +17,7 @@
 #include "dictionary/structure/v4/ver4_dict_buffers.h"
 
 #include <cerrno>
+#include <climits>
 #include <cstring>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -48,16 +49,26 @@ namespace latinime {
     }
     std::vector<ReadWriteByteArrayView> buffers;
     const ReadWriteByteArrayView buffer = bodyBuffer->getReadWriteByteArrayView();
+    if (buffer.size() > static_cast<size_t>(INT_MAX)) {
+        AKLOGE("The dict body file is too large.");
+        return Ver4DictBuffersPtr(nullptr);
+    }
     int position = 0;
     while (position < static_cast<int>(buffer.size())) {
-        const int bufferSize = ByteArrayUtils::readUint32AndAdvancePosition(
+        const int remaining = static_cast<int>(buffer.size()) - position;
+        if (remaining < 4) {
+            AKLOGE("The dict body file is truncated.");
+            return Ver4DictBuffersPtr(nullptr);
+        }
+        const uint32_t bufferSize = ByteArrayUtils::readUint32AndAdvancePosition(
                 buffer.data(), &position);
-        buffers.push_back(buffer.subView(position, bufferSize));
-        position += bufferSize;
-        if (bufferSize < 0 || position < 0 || position > static_cast<int>(buffer.size())) {
+        const size_t remainingAfterSize = buffer.size() - static_cast<size_t>(position);
+        if (bufferSize > remainingAfterSize) {
             AKLOGE("The dict body file is corrupted.");
             return Ver4DictBuffersPtr(nullptr);
         }
+        buffers.push_back(buffer.subView(position, bufferSize));
+        position += static_cast<int>(bufferSize);
     }
     if (buffers.size() != Ver4DictConstants::NUM_OF_CONTENT_BUFFERS_IN_BODY_FILE) {
         AKLOGE("The dict body file is corrupted.");

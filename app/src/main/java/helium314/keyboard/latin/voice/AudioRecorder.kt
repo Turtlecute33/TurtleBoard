@@ -59,6 +59,11 @@ class AudioRecorder(
         private const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
         // Amplitude threshold (0..32767) separating silence from speech for auto-stop heuristic.
         private const val SPEECH_AMPLITUDE_THRESHOLD = 300.0
+        // Recorder instances own short-lived scopes that are cancelled during IME teardown. Stopping
+        // the platform AudioRecord must outlive those scopes so a blocking read is always released.
+        private val audioStopScope = CoroutineScope(
+            SupervisorJob() + Dispatchers.IO + CoroutineName("AudioRecordStopScope")
+        )
     }
 
     private var audioRecord: AudioRecord? = null
@@ -280,7 +285,7 @@ class AudioRecorder(
 
     private fun dispatchAudioRecordStopAsync() {
         val ar = audioRecord ?: return
-        recordingScope.launch(CoroutineName("AudioRecorderStop")) {
+        audioStopScope.launch(CoroutineName("AudioRecorderStop")) {
             try { ar.stop() } catch (e: IllegalStateException) {
                 Log.w(TAG, "AudioRecord.stop() failed", e)
             }

@@ -181,6 +181,7 @@ object Defaults {
     const val PREF_USER_ALL_COLORS = ""
     const val PREF_SAVE_SUBTYPE_PER_APP = false
     const val PREF_VOICE_INPUT_ENABLED = false
+    const val PREF_VOICE_SPEECH_ENGINE = "cloud"
     const val PREF_AI_PROVIDER = "openrouter"
     const val PREF_OPENROUTER_API_KEY = ""
     const val PREF_OPENROUTER_ZDR_ENABLED = true

@@ -40,6 +40,8 @@ import helium314.keyboard.latin.voice.AiProvider
 import helium314.keyboard.latin.voice.ModelCatalog
 import helium314.keyboard.latin.voice.OpenRouterClient
 import helium314.keyboard.latin.voice.PolishLevel
+import helium314.keyboard.latin.voice.SpeechEngine
+import helium314.keyboard.latin.voice.isOnDeviceRecognitionAvailable
 import helium314.keyboard.latin.voice.parseVoiceDictionaryTerms
 import helium314.keyboard.latin.voice.parseExpectedLanguages
 import helium314.keyboard.latin.voice.resolveVoiceModel
@@ -80,6 +82,10 @@ fun VoiceScreen(
     val voiceModel by rememberStringPreferenceState(Settings.PREF_VOICE_MODEL, Defaults.PREF_VOICE_MODEL)
     val sttModel by rememberStringPreferenceState(Settings.PREF_VOICE_STT_MODEL, Defaults.PREF_VOICE_STT_MODEL)
     val providerPref by rememberStringPreferenceState(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER)
+    val speechEnginePref by rememberStringPreferenceState(
+        Settings.PREF_VOICE_SPEECH_ENGINE,
+        Defaults.PREF_VOICE_SPEECH_ENGINE
+    )
     val traditionalEnabled by rememberBooleanPreferenceState(
         Settings.PREF_VOICE_TRADITIONAL_BUTTON_ENABLED,
         Defaults.PREF_VOICE_TRADITIONAL_BUTTON_ENABLED
@@ -106,6 +112,7 @@ fun VoiceScreen(
             voiceModel = voiceModel,
             sttModel = sttModel,
             provider = AiProvider.fromPref(providerPref),
+            speechEngine = SpeechEngine.fromPref(speechEnginePref),
             traditionalEnabled = traditionalEnabled,
             sttEnabled = sttEnabled,
             voiceAutoStop = voiceAutoStop,
@@ -120,51 +127,60 @@ internal fun buildVoiceScreenItems(
     voiceModel: String,
     sttModel: String = Defaults.PREF_VOICE_STT_MODEL,
     provider: AiProvider = AiProvider.OPENROUTER,
+    speechEngine: SpeechEngine = SpeechEngine.CLOUD,
     traditionalEnabled: Boolean = Defaults.PREF_VOICE_TRADITIONAL_BUTTON_ENABLED,
     sttEnabled: Boolean = Defaults.PREF_VOICE_STT_ENABLED,
     voiceAutoStop: Boolean = Defaults.PREF_VOICE_AUTO_STOP_SILENCE,
     autoPolishEnabled: Boolean = Defaults.PREF_VOICE_AUTO_POLISH_ENABLED,
     polishModel: String = Defaults.PREF_VOICE_POLISH_MODEL,
-): List<Any?> = listOf(
-    Settings.PREF_VOICE_INPUT_ENABLED,
-    if (voiceInputEnabled) Settings.PREF_AI_PROVIDER else null,
-    if (voiceInputEnabled) provider.apiKeyPrefKey() else null,
-    if (voiceInputEnabled && provider == AiProvider.OPENROUTER) Settings.PREF_OPENROUTER_ZDR_ENABLED else null,
-    if (voiceInputEnabled) Settings.PREF_VOICE_ACTION_TEST_KEY else null,
-    // Traditional voice (chat-audio) subsection — independent of STT below.
-    if (voiceInputEnabled) R.string.voice_traditional_category else null,
-    if (voiceInputEnabled) Settings.PREF_VOICE_TRADITIONAL_BUTTON_ENABLED else null,
-    if (voiceInputEnabled && traditionalEnabled) Settings.PREF_VOICE_MODEL else null,
-    if (voiceInputEnabled && traditionalEnabled && voiceModel == "custom") Settings.PREF_VOICE_MODEL_CUSTOM else null,
-    if (voiceInputEnabled && traditionalEnabled) Settings.PREF_VOICE_ACTION_PROMPT_PRESET else null,
-    if (voiceInputEnabled && traditionalEnabled) Settings.PREF_VOICE_TRANSCRIPTION_PROMPT else null,
-    if (voiceInputEnabled && traditionalEnabled) Settings.PREF_VOICE_TRANSCRIPTION_DICTIONARY else null,
-    if (voiceInputEnabled && traditionalEnabled) Settings.PREF_VOICE_EXPECTED_LANGUAGES else null,
-    // Dedicated STT subsection — fully independent toggle and settings.
-    if (voiceInputEnabled && provider == AiProvider.OPENROUTER) R.string.voice_stt_category else null,
-    if (voiceInputEnabled && provider == AiProvider.OPENROUTER) Settings.PREF_VOICE_STT_ENABLED else null,
-    if (voiceInputEnabled && provider == AiProvider.OPENROUTER && sttEnabled) Settings.PREF_VOICE_STT_MODEL else null,
-    if (voiceInputEnabled && provider == AiProvider.OPENROUTER && sttEnabled && sttModel == "custom") Settings.PREF_VOICE_STT_MODEL_CUSTOM else null,
-    if (voiceInputEnabled && provider == AiProvider.OPENROUTER && sttEnabled) Settings.PREF_VOICE_STT_PROMPT else null,
-    if (voiceInputEnabled && provider == AiProvider.OPENROUTER && sttEnabled) Settings.PREF_VOICE_STT_DICTIONARY else null,
-    if (voiceInputEnabled && provider == AiProvider.OPENROUTER && sttEnabled) Settings.PREF_VOICE_STT_EXPECTED_LANGUAGES else null,
-    // Auto-polish: a second LLM pass that cleans up the raw transcription. Applies to both the
-    // chat-audio and dedicated-STT flows, hence its placement above the shared section.
-    if (voiceInputEnabled) R.string.voice_polish_category else null,
-    if (voiceInputEnabled) Settings.PREF_VOICE_AUTO_POLISH_ENABLED else null,
-    if (voiceInputEnabled && autoPolishEnabled) Settings.PREF_VOICE_POLISH_LEVEL else null,
-    if (voiceInputEnabled && autoPolishEnabled) Settings.PREF_VOICE_POLISH_MODEL else null,
-    if (voiceInputEnabled && autoPolishEnabled && polishModel == "custom") Settings.PREF_VOICE_POLISH_MODEL_CUSTOM else null,
-    // Shared playback / capture options apply to both flows.
-    if (voiceInputEnabled) R.string.voice_shared_category else null,
-    if (voiceInputEnabled) Settings.PREF_VOICE_LANGUAGE_HINT else null,
-    if (voiceInputEnabled) Settings.PREF_VOICE_SPACE_HEURISTIC else null,
-    if (voiceInputEnabled) Settings.PREF_VOICE_HAPTIC_FEEDBACK else null,
-    if (voiceInputEnabled) Settings.PREF_VOICE_MIC_SENSITIVITY else null,
-    if (voiceInputEnabled) Settings.PREF_VOICE_MAX_DURATION_SECONDS else null,
-    if (voiceInputEnabled) Settings.PREF_VOICE_AUTO_STOP_SILENCE else null,
-    if (voiceInputEnabled && voiceAutoStop) Settings.PREF_VOICE_AUTO_STOP_SILENCE_SECONDS else null,
-)
+): List<Any?> {
+    // Everything from the provider key down to auto-polish describes a network request. The
+    // on-device engine makes none, so showing those rows would offer settings that cannot apply.
+    val cloud = voiceInputEnabled && speechEngine == SpeechEngine.CLOUD
+    return listOf(
+        Settings.PREF_VOICE_INPUT_ENABLED,
+        if (voiceInputEnabled) Settings.PREF_VOICE_SPEECH_ENGINE else null,
+        if (cloud) Settings.PREF_AI_PROVIDER else null,
+        if (cloud) provider.apiKeyPrefKey() else null,
+        if (cloud && provider == AiProvider.OPENROUTER) Settings.PREF_OPENROUTER_ZDR_ENABLED else null,
+        if (cloud) Settings.PREF_VOICE_ACTION_TEST_KEY else null,
+        // Traditional voice (chat-audio) subsection — independent of STT below.
+        if (cloud) R.string.voice_traditional_category else null,
+        if (cloud) Settings.PREF_VOICE_TRADITIONAL_BUTTON_ENABLED else null,
+        if (cloud && traditionalEnabled) Settings.PREF_VOICE_MODEL else null,
+        if (cloud && traditionalEnabled && voiceModel == "custom") Settings.PREF_VOICE_MODEL_CUSTOM else null,
+        if (cloud && traditionalEnabled) Settings.PREF_VOICE_ACTION_PROMPT_PRESET else null,
+        if (cloud && traditionalEnabled) Settings.PREF_VOICE_TRANSCRIPTION_PROMPT else null,
+        if (cloud && traditionalEnabled) Settings.PREF_VOICE_TRANSCRIPTION_DICTIONARY else null,
+        if (cloud && traditionalEnabled) Settings.PREF_VOICE_EXPECTED_LANGUAGES else null,
+        // Dedicated STT subsection — fully independent toggle and settings.
+        if (cloud && provider == AiProvider.OPENROUTER) R.string.voice_stt_category else null,
+        if (cloud && provider == AiProvider.OPENROUTER) Settings.PREF_VOICE_STT_ENABLED else null,
+        if (cloud && provider == AiProvider.OPENROUTER && sttEnabled) Settings.PREF_VOICE_STT_MODEL else null,
+        if (cloud && provider == AiProvider.OPENROUTER && sttEnabled && sttModel == "custom") Settings.PREF_VOICE_STT_MODEL_CUSTOM else null,
+        if (cloud && provider == AiProvider.OPENROUTER && sttEnabled) Settings.PREF_VOICE_STT_PROMPT else null,
+        if (cloud && provider == AiProvider.OPENROUTER && sttEnabled) Settings.PREF_VOICE_STT_DICTIONARY else null,
+        if (cloud && provider == AiProvider.OPENROUTER && sttEnabled) Settings.PREF_VOICE_STT_EXPECTED_LANGUAGES else null,
+        // Auto-polish: a second LLM pass that cleans up the raw transcription. Applies to both the
+        // chat-audio and dedicated-STT flows, hence its placement above the shared section.
+        if (cloud) R.string.voice_polish_category else null,
+        if (cloud) Settings.PREF_VOICE_AUTO_POLISH_ENABLED else null,
+        if (cloud && autoPolishEnabled) Settings.PREF_VOICE_POLISH_LEVEL else null,
+        if (cloud && autoPolishEnabled) Settings.PREF_VOICE_POLISH_MODEL else null,
+        if (cloud && autoPolishEnabled && polishModel == "custom") Settings.PREF_VOICE_POLISH_MODEL_CUSTOM else null,
+        // Shared playback / capture options apply to both flows.
+        if (voiceInputEnabled) R.string.voice_shared_category else null,
+        if (voiceInputEnabled) Settings.PREF_VOICE_LANGUAGE_HINT else null,
+        if (voiceInputEnabled) Settings.PREF_VOICE_SPACE_HEURISTIC else null,
+        if (voiceInputEnabled) Settings.PREF_VOICE_HAPTIC_FEEDBACK else null,
+        if (voiceInputEnabled) Settings.PREF_VOICE_MAX_DURATION_SECONDS else null,
+        // The platform recogniser owns the microphone end to end: it applies no capture gain we can
+        // set, and it decides for itself when the utterance ended.
+        if (cloud) Settings.PREF_VOICE_MIC_SENSITIVITY else null,
+        if (cloud) Settings.PREF_VOICE_AUTO_STOP_SILENCE else null,
+        if (cloud && voiceAutoStop) Settings.PREF_VOICE_AUTO_STOP_SILENCE_SECONDS else null,
+    )
+}
 
 fun createVoiceSettings(context: Context) = listOf(
     Setting(context, Settings.PREF_VOICE_INPUT_ENABLED, R.string.voice_input_enabled, R.string.voice_input_enabled_summary) { setting ->
@@ -247,6 +263,30 @@ fun createVoiceSettings(context: Context) = listOf(
     },
     Setting(context, Settings.PREF_PAYPERQ_API_KEY, R.string.payperq_api_key, R.string.payperq_api_key_summary) {
         VoiceApiKeyPreference(it, AiProvider.PAYPERQ)
+    },
+    Setting(
+        context,
+        Settings.PREF_VOICE_SPEECH_ENGINE,
+        R.string.voice_speech_engine,
+        R.string.voice_speech_engine_summary
+    ) { setting ->
+        val ctx = LocalContext.current
+        val unavailableMessage = stringResource(R.string.voice_error_on_device_unavailable)
+        val items = listOf(
+            ctx.getString(R.string.voice_speech_engine_cloud) to SpeechEngine.CLOUD.prefValue,
+            ctx.getString(R.string.voice_speech_engine_on_device) to SpeechEngine.ON_DEVICE.prefValue,
+        )
+        ListPreference(setting, items, Defaults.PREF_VOICE_SPEECH_ENGINE) { value ->
+            // Saved either way: availability is a device capability the user may still be able to
+            // fix (installing a speech service), and silently refusing the choice would be worse
+            // than telling them why dictation will not work yet.
+            if (SpeechEngine.fromPref(value) == SpeechEngine.ON_DEVICE &&
+                !isOnDeviceRecognitionAvailable(ctx)
+            ) {
+                Toast.makeText(ctx, unavailableMessage, Toast.LENGTH_LONG).show()
+            }
+            KeyboardSwitcher.getInstance().setThemeNeedsReload()
+        }
     },
     Setting(context, Settings.PREF_AI_PROVIDER, R.string.ai_provider) { setting ->
         val ctx = LocalContext.current
@@ -772,12 +812,10 @@ private fun VoiceTestKeyPreference(setting: Setting) {
                 Toast.makeText(ctx, R.string.voice_error_no_model, Toast.LENGTH_SHORT).show()
                 return@Preference
             }
-            val useZdr = provider == AiProvider.OPENROUTER &&
-                prefs.getBoolean(Settings.PREF_OPENROUTER_ZDR_ENABLED, Defaults.PREF_OPENROUTER_ZDR_ENABLED)
             busy = true
             lastResult = null
             scope.launch {
-                val result = withContext(Dispatchers.IO) { probeApiKey(provider, apiKey, model, useZdr) }
+                val result = withContext(Dispatchers.IO) { probeApiKey(provider, apiKey, model) }
                 Toast.makeText(ctx, result.messageRes, Toast.LENGTH_SHORT).show()
                 lastResult = result
                 busy = false
@@ -788,13 +826,12 @@ private fun VoiceTestKeyPreference(setting: Setting) {
 
 private enum class TestResult(@StringRes val messageRes: Int) {
     OK(R.string.voice_test_key_success),
-    OK_ZDR_UNAVAILABLE(R.string.voice_test_key_success_zdr_unavailable),
     INVALID(R.string.voice_test_key_invalid),
     INVALID_MODEL(R.string.voice_test_key_invalid_model),
     NETWORK(R.string.voice_test_key_network_error),
 }
 
-private fun probeApiKey(provider: AiProvider, apiKey: String, model: String, useZdr: Boolean): TestResult {
+private fun probeApiKey(provider: AiProvider, apiKey: String, model: String): TestResult {
     if (provider == AiProvider.PAYPERQ) return probePayPerQApiKey(apiKey, model)
     val keyConn = (java.net.URL(OpenRouterClient.KEY_ENDPOINT).openConnection() as HttpURLConnection).apply {
         requestMethod = "GET"
@@ -805,7 +842,7 @@ private fun probeApiKey(provider: AiProvider, apiKey: String, model: String, use
     }
     return try {
         when (keyConn.responseCode) {
-            200 -> probeModel(apiKey, model, useZdr)
+            200 -> probeModel(apiKey, model)
             401, 403 -> TestResult.INVALID
             else -> TestResult.NETWORK
         }
@@ -818,7 +855,8 @@ private fun probeApiKey(provider: AiProvider, apiKey: String, model: String, use
 
 private fun probePayPerQApiKey(apiKey: String, model: String): TestResult {
     if (model.isBlank()) return TestResult.INVALID_MODEL
-    val conn = (java.net.URL(OpenRouterClient.PAYPERQ_AUDIO_MODELS_ENDPOINT).openConnection() as HttpURLConnection).apply {
+    val modelsEndpoint = payPerQModelsEndpoint(model)
+    val conn = (java.net.URL(modelsEndpoint).openConnection() as HttpURLConnection).apply {
         requestMethod = "GET"
         setRequestProperty("Authorization", "Bearer $apiKey")
         connectTimeout = OpenRouterClient.DEFAULT_CONNECT_TIMEOUT_MS
@@ -826,7 +864,11 @@ private fun probePayPerQApiKey(apiKey: String, model: String): TestResult {
     }
     return try {
         when (conn.responseCode) {
-            200 -> TestResult.OK
+            200 -> if (payPerQModelResponseContains(readProbeResponseCapped(conn.inputStream), model)) {
+                TestResult.OK
+            } else {
+                TestResult.INVALID_MODEL
+            }
             401, 403 -> TestResult.INVALID
             else -> TestResult.NETWORK
         }
@@ -837,7 +879,7 @@ private fun probePayPerQApiKey(apiKey: String, model: String): TestResult {
     }
 }
 
-private fun probeModel(apiKey: String, model: String, useZdr: Boolean): TestResult {
+private fun probeModel(apiKey: String, model: String): TestResult {
     val parts = model.trim().split("/", limit = 2)
     if (parts.size != 2 || parts.any { it.isBlank() }) {
         return TestResult.INVALID_MODEL
@@ -853,7 +895,7 @@ private fun probeModel(apiKey: String, model: String, useZdr: Boolean): TestResu
     }
     return try {
         when (conn.responseCode) {
-            200 -> if (useZdr && !probeZdrModelSupport(apiKey, model)) TestResult.OK_ZDR_UNAVAILABLE else TestResult.OK
+            200 -> TestResult.OK
             401, 403 -> TestResult.INVALID
             404 -> TestResult.INVALID_MODEL
             else -> TestResult.NETWORK
@@ -865,37 +907,18 @@ private fun probeModel(apiKey: String, model: String, useZdr: Boolean): TestResu
     }
 }
 
-private fun probeZdrModelSupport(apiKey: String, model: String): Boolean {
-    // The catalog is the authoritative source for known slugs — its `zdr` flags are verified
-    // against OpenRouter's ZDR endpoint list, and they're what the request path actually keys
-    // off when deciding to send `provider.zdr: true`. Hitting `/endpoints/zdr` here used to
-    // false-negative for every `~author/...-latest` alias because OpenRouter returns canonical
-    // model IDs without the leading tilde, so the exact-string match never landed.
-    if (ModelCatalog.openRouterSupportsZdr(model)) return true
-    val conn = (java.net.URL(OpenRouterClient.ZDR_ENDPOINT).openConnection() as HttpURLConnection).apply {
-        requestMethod = "GET"
-        setRequestProperty("Authorization", "Bearer $apiKey")
-        OpenRouterClient.applyOpenRouterAttributionHeaders(this)
-        connectTimeout = OpenRouterClient.DEFAULT_CONNECT_TIMEOUT_MS
-        readTimeout = 10_000
+internal fun payPerQModelResponseContains(body: String, model: String): Boolean {
+    val models = JSONObject(body).optJSONArray("data") ?: return false
+    for (i in 0 until models.length()) {
+        if (models.optJSONObject(i)?.optString("id") == model) return true
     }
-    return try {
-        if (conn.responseCode != 200) return true
-        val body = readProbeResponseCapped(conn.inputStream)
-        val endpoints = JSONObject(body).optJSONArray("data") ?: return true
-        // Belt-and-suspenders for custom slugs: also accept a match against the tilde-stripped
-        // form, since the user can paste either shape into the Custom Model ID field.
-        val tildeStripped = model.removePrefix("~")
-        for (i in 0 until endpoints.length()) {
-            val id = endpoints.optJSONObject(i)?.optString("model_id") ?: continue
-            if (id == model || id == tildeStripped) return true
-        }
-        false
-    } catch (_: Exception) {
-        true
-    } finally {
-        conn.disconnect()
-    }
+    return false
+}
+
+internal fun payPerQModelsEndpoint(model: String): String = if ("/" in model) {
+    OpenRouterClient.PAYPERQ_MODELS_ENDPOINT
+} else {
+    OpenRouterClient.PAYPERQ_AUDIO_MODELS_ENDPOINT
 }
 
 private fun readProbeResponseCapped(input: java.io.InputStream): String {

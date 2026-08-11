@@ -15,12 +15,9 @@ package helium314.keyboard.latin.voice
  * use it; providers that cache implicitly ignore it). The `cache` flag therefore no longer
  * gates the request — it only drives the verified-"CACHE" pill in the picker.
  *
- * The `zdr` flag is verified against OpenRouter's `/api/v1/endpoints/zdr` response — see the
- * changelog for the verification date. ZDR enforcement is best-effort: with the user toggle on,
- * `provider.zdr: true` is emitted only for catalog models flagged `zdr = true`; other
- * models (including custom slugs) skip enforcement so the request still succeeds. The
- * missing ZDR pill in the picker is the user-visible signal that strict ZDR isn't in
- * effect for that model.
+ * The `zdr` flag is verified against OpenRouter's `/api/v1/endpoints/zdr` response and drives the
+ * model-picker badge and settings validation. Requests do not rely on this potentially stale
+ * catalog: with the toggle on they try ZDR first, then fall back to standard routing if needed.
  */
 internal enum class PricingTier { FREE, CHEAP, MEDIUM, EXPENSIVE }
 

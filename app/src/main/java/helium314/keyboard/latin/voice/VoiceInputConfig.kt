@@ -96,28 +96,11 @@ internal fun safeUserFacingError(context: Context, e: Throwable, @StringRes fall
     return context.getString(fallbackResId)
 }
 
-/**
- * Models already reported as lacking a verified ZDR route, so the disclosure below fires once per
- * model per process instead of on every request.
- */
+/** Models already disclosed as having fallen back from ZDR, once per process. */
 private val zdrWarnedModels: MutableSet<String> =
     Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
 
-/**
- * ZDR enforcement is best-effort: [OpenRouterClient] only sends `provider.zdr: true` for catalog
- * models with a verified zero-data-retention route, and proceeds without it for anything else
- * (including custom slugs it can't classify). Downgrading silently would leave the user believing
- * their audio was covered by a no-retention contract when it wasn't, so say so — once per model,
- * and without blocking the request.
- */
-internal fun warnIfZeroDataRetentionUnenforceable(
-    context: Context,
-    provider: AiProvider,
-    model: String,
-    useZeroDataRetention: Boolean,
-) {
-    if (!useZeroDataRetention || provider != AiProvider.OPENROUTER) return
-    if (ModelCatalog.openRouterSupportsZdr(model)) return
+internal fun warnAfterZdrFallback(context: Context, model: String) {
     if (!zdrWarnedModels.add(model)) return
     Toast.makeText(
         context,
@@ -147,6 +130,23 @@ internal data class ResolvedVoicePrompt(
 enum class VoiceTranscriptionMode {
     CHAT_AUDIO,
     OPENROUTER_STT,
+}
+
+/**
+ * Which engine turns speech into text. [CLOUD] uploads a WAV to the configured AI provider;
+ * [ON_DEVICE] hands the microphone to Android's on-device recognizer and never touches the network.
+ *
+ * The engine covers speech recognition only. Text Fix and auto-polish are LLM features with no
+ * on-device equivalent here, so they stay on the cloud provider regardless of this setting.
+ */
+enum class SpeechEngine(val prefValue: String) {
+    CLOUD("cloud"),
+    ON_DEVICE("on_device");
+
+    companion object {
+        fun fromPref(value: String?): SpeechEngine =
+            entries.firstOrNull { it.prefValue == value } ?: CLOUD
+    }
 }
 
 /**

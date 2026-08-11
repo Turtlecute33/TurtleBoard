@@ -48,9 +48,17 @@ You're chatting in English, Italian, German, whatever isn't your strongest. You 
 
 <br>
 
+## Offline speech recognition
+
+Prefer that your voice never leaves the phone? Set *WisprBoard Settings → Voice Input → Speech engine* to **On-device**. Dictation then runs through Android's offline recogniser: no API key, no connection, no request. Accuracy is below a cloud model, and auto-polish is skipped — sending the transcript to an LLM afterwards would defeat the point. Needs Android 12 or newer and the offline language pack for the language you dictate in.
+
+Cloud AI stays the default, and Text Fix is unaffected either way.
+
+<br>
+
 ## Zero Data Retention
 
-OpenRouter is the default provider, and WisprBoard asks OpenRouter for **zero-data-retention endpoints by default**. When your model offers a [ZDR route](https://openrouter.ai/docs/use-cases/zero-data-retention), your audio and text aren't logged, stored, or used for training. If a model doesn't offer one, WisprBoard tells you and falls back so things still work. You can turn the strict setting off if you'd rather.
+OpenRouter is the default provider, and WisprBoard asks OpenRouter for **zero-data-retention endpoints by default**. When your model offers a [ZDR route](https://openrouter.ai/docs/use-cases/zero-data-retention), your audio and text aren't logged, stored, or used for training. If a model doesn't offer one, WisprBoard tells you and falls back so things still work. You can turn the setting off if you'd rather.
 
 PayPerQ support uses PayPerQ's own API endpoints and policies. Your provider API keys are encrypted with the Android Keystore, excluded from cloud backups, and never written to logs. AI is opt-in: both features stay off until you paste a key in.
 
@@ -63,8 +71,9 @@ PayPerQ support uses PayPerQ's own API endpoints and policies. Your provider API
 | Everything HeliBoard does               |     ✅     |     ✅      |
 | Installs alongside HeliBoard            |     —     |     ✅      |
 | Voice-to-text via OpenRouter or PayPerQ |     —     |     ✅      |
+| Offline on-device voice-to-text         |     —     |     ✅      |
 | Text Fix (rewrite selected text)        |     —     |     ✅      |
-| Zero Data Retention enforced by default |     —     |     ✅      |
+| Zero Data Retention requested by default where supported |     —     |     ✅      |
 | API key encrypted on-device             |     —     |     ✅      |
 
 If you don't want AI features, stay on HeliBoard. It's wonderful as-is.
@@ -82,7 +91,7 @@ WisprBoard has no backend, no analytics, no tracking. Once your audio or selecte
 
 1. **Download** the APK from [Releases](https://github.com/Turtlecute33/WisprBoard/releases/latest).
 2. **Enable** WisprBoard in *Settings → System → Keyboards*.
-3. **Choose a provider** in *WisprBoard Settings → Voice Input*, then add an OpenRouter or PayPerQ API key.
+3. **Pick a speech engine** in *WisprBoard Settings → Voice Input*. On-device needs nothing else; Cloud AI needs a provider and an OpenRouter or PayPerQ API key.
 4. **Long-press Return**, tap the mic, start talking.
 
 WisprBoard installs side-by-side with HeliBoard, so you can keep both.

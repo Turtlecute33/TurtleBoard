@@ -3,6 +3,8 @@ package helium314.keyboard.latin.voice
 
 import android.Manifest
 import android.content.Context
+import android.content.SharedPreferences
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.text.InputType
@@ -114,6 +116,8 @@ class VoiceInputManager(
     @Volatile private var stopFinalizeJob: Job? = null
     @Volatile private var isStopFinalizing = false
     @Volatile private var currentUseDedicatedStt = false
+    /** Non-null only while the on-device engine owns the microphone; the cloud path never sets it. */
+    @Volatile private var onDeviceRecognizer: OnDeviceRecognizer? = null
 
     fun getState() = state
 
@@ -127,10 +131,15 @@ class VoiceInputManager(
     fun isCapturing(): Boolean = state == State.RECORDING && !isStopFinalizing
 
     /** Exposed so UI can render a live amplitude meter. */
-    fun getCurrentAmplitude(): Double = audioRecorder.currentAmplitude
+    fun getCurrentAmplitude(): Double =
+        onDeviceRecognizer?.currentAmplitude ?: audioRecorder.currentAmplitude
 
     /** Exposed so UI can render an elapsed-time counter. */
-    fun getCurrentDurationMs(): Long = audioRecorder.currentDurationMs
+    fun getCurrentDurationMs(): Long =
+        onDeviceRecognizer?.currentDurationMs ?: audioRecorder.currentDurationMs
+
+    private fun speechEngine(prefs: SharedPreferences): SpeechEngine =
+        SpeechEngine.fromPref(prefs.getString(Settings.PREF_VOICE_SPEECH_ENGINE, Defaults.PREF_VOICE_SPEECH_ENGINE))
 
     /** Maps the mic-sensitivity preference to a linear capture gain. "normal" leaves audio untouched. */
     private fun micSensitivityGain(value: String?): Float = when (value) {
@@ -153,6 +162,14 @@ class VoiceInputManager(
 
         callbacks.getBlockedErrorResId()?.let {
             Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // The on-device engine needs neither a key nor a network, so it skips the whole provider
+        // preflight below. The sensitive-field guard above still applies: an offline transcription
+        // is still a transcription, and a password box is no place for one.
+        if (speechEngine(prefs) == SpeechEngine.ON_DEVICE) {
+            startOnDeviceRecording(prefs)
             return
         }
 
@@ -226,10 +243,86 @@ class VoiceInputManager(
         callbacks.onRecordingStarted()
     }
 
+    /**
+     * Runs a whole dictation through Android's on-device recognizer. The platform owns the
+     * microphone, so there is no WAV file, no upload, and no auto-polish pass — picking this engine
+     * means nothing spoken leaves the device, and silently shipping the transcript to a cloud LLM
+     * for cleanup would break exactly that promise.
+     */
+    private fun startOnDeviceRecording(prefs: SharedPreferences) {
+        if (!PermissionsUtil.checkAllPermissionsGranted(context, Manifest.permission.RECORD_AUDIO)) {
+            Toast.makeText(context, R.string.voice_error_no_permission, Toast.LENGTH_SHORT).show()
+            return
+        }
+        // The explicit SDK_INT check is what lets us construct the API 31+ recognizer below; the
+        // availability call alone tells lint nothing.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || !isOnDeviceRecognitionAvailable(context)) {
+            Toast.makeText(context, R.string.voice_error_on_device_unavailable, Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val maxDurationSec = prefs.getInt(Settings.PREF_VOICE_MAX_DURATION_SECONDS, Defaults.PREF_VOICE_MAX_DURATION_SECONDS)
+            .coerceIn(15, 300)
+        val languageHintEnabled = prefs.getBoolean(Settings.PREF_VOICE_LANGUAGE_HINT, Defaults.PREF_VOICE_LANGUAGE_HINT)
+        val spaceHeuristicEnabled = prefs.getBoolean(Settings.PREF_VOICE_SPACE_HEURISTIC, Defaults.PREF_VOICE_SPACE_HEURISTIC)
+        val localeHint = if (languageHintEnabled) callbacks.getLocaleHint() else null
+
+        val requestToken = activeTranscriptionToken.incrementAndGet()
+        val recognizer = OnDeviceRecognizer(context)
+        val listener = object : OnDeviceRecognizer.Listener {
+            override fun onReadyForSpeech() = Unit
+
+            override fun onEndOfSpeech() {
+                isStopFinalizing = false
+                if (state == State.RECORDING) {
+                    state = State.TRANSCRIBING
+                    callbacks.onTranscribing()
+                }
+            }
+
+            override fun onMaxDurationReached() {
+                callbacks.onMaxDurationReached()
+            }
+
+            override fun onResult(text: String) {
+                val transcription = sanitizeTranscription(text)
+                if (transcription.isBlank()) {
+                    finishTranscription(requestToken, error = context.getString(R.string.voice_error_silent))
+                    return
+                }
+                val spacingContext = if (spaceHeuristicEnabled) callbacks.getSpacingContext() else null
+                finishTranscription(requestToken, result = applySpacing(transcription, spacingContext))
+            }
+
+            override fun onError(messageRes: Int) {
+                finishTranscription(requestToken, error = context.getString(messageRes))
+            }
+        }
+
+        // Enter RECORDING before handing over so a recognizer callback can never observe a stale
+        // IDLE state and discard its own result.
+        state = State.RECORDING
+        isStopFinalizing = false
+        onDeviceRecognizer = recognizer
+        if (!recognizer.start(listener, localeHint, maxDurationSec * 1000L)) {
+            onDeviceRecognizer = null
+            state = State.IDLE
+            Toast.makeText(context, R.string.voice_error_on_device_unavailable, Toast.LENGTH_LONG).show()
+            return
+        }
+        callbacks.onRecordingStarted()
+    }
+
     @Synchronized
     fun stopRecording() {
         if (state != State.RECORDING || isStopFinalizing) return
         isStopFinalizing = true
+
+        onDeviceRecognizer?.let {
+            // The recognizer decodes asynchronously; onEndOfSpeech moves us to TRANSCRIBING.
+            it.stop()
+            return
+        }
 
         // Kicking the WAV finalization off the main thread: AudioRecorder.stop() returns a
         // Deferred that completes once the recording loop drains and the file header is
@@ -351,8 +444,6 @@ class VoiceInputManager(
             callbacks.onError(context.getString(R.string.voice_error_no_model))
             return
         }
-        warnIfZeroDataRetentionUnenforceable(context, provider, model, useZdr)
-        if (polishModel != null) warnIfZeroDataRetentionUnenforceable(context, provider, polishModel, useZdr)
         val localeHint = if (languageHintEnabled) callbacks.getLocaleHint() else null
         val prompt = resolveVoicePrompt(savedPrompt, localeHint, transcriptionDictionary, expectedLanguages)
         val spacingContext = if (spaceHeuristicEnabled) callbacks.getSpacingContext() else null
@@ -373,6 +464,9 @@ class VoiceInputManager(
         transcriptionJob = backgroundScope.launch(CoroutineName("VoiceTranscription")) {
             try {
                 val transcription = sanitizeTranscription(runInterruptible { client.transcribe(wavFile) })
+                if (client.didFallbackFromZdr) {
+                    mainHandler.post { warnAfterZdrFallback(context, model) }
+                }
                 if (transcription.isBlank()) {
                     finishTranscription(
                         requestToken = requestToken,
@@ -396,12 +490,18 @@ class VoiceInputManager(
                     transcriptionClient = polishClient
                     try {
                         val raw = runInterruptible { polishClient.fixText(transcription) }
+                        if (polishClient.didFallbackFromZdr) {
+                            mainHandler.post { warnAfterZdrFallback(context, polishModel) }
+                        }
                         sanitizeTranscription(raw).takeIf { it.isNotBlank() } ?: transcription
                     } catch (ce: CancellationException) {
                         throw ce
                     } catch (ie: InterruptedException) {
                         throw ie
                     } catch (pe: Exception) {
+                        if (polishClient.didFallbackFromZdr) {
+                            mainHandler.post { warnAfterZdrFallback(context, polishModel) }
+                        }
                         if (BuildConfig.DEBUG) Log.w(TAG, "Polish failed; falling back to raw transcription", pe)
                         transcription
                     } finally {
@@ -417,6 +517,9 @@ class VoiceInputManager(
                 if (BuildConfig.DEBUG) Log.i(TAG, "Transcription cancelled")
                 finishTranscription(requestToken = requestToken)
             } catch (e: Exception) {
+                if (client.didFallbackFromZdr) {
+                    mainHandler.post { warnAfterZdrFallback(context, model) }
+                }
                 Log.e(TAG, "Transcription failed", e)
                 finishTranscription(
                     requestToken = requestToken,
@@ -432,6 +535,17 @@ class VoiceInputManager(
     /** Cancel either a live recording or an in-flight upload. */
     @Synchronized
     fun cancelRecording() {
+        onDeviceRecognizer?.let { recognizer ->
+            recognizer.cancel()
+            onDeviceRecognizer = null
+            // Bump the token so a result already posted by the platform is dropped on arrival.
+            activeTranscriptionToken.incrementAndGet()
+            isStopFinalizing = false
+            currentUseDedicatedStt = false
+            state = State.IDLE
+            callbacks.onFinished()
+            return
+        }
         when (state) {
             State.RECORDING -> {
                 audioRecorder.cancel()
@@ -503,7 +617,9 @@ class VoiceInputManager(
             }
             transcriptionJob = null
             transcriptionClient = null
+            onDeviceRecognizer = null
             currentUseDedicatedStt = false
+            isStopFinalizing = false
             state = State.IDLE
             callbacks.onFinished()
             if (!result.isNullOrEmpty()) {

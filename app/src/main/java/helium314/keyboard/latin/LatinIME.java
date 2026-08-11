@@ -32,6 +32,7 @@ import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InlineSuggestion;
 import android.view.inputmethod.InlineSuggestionsRequest;
 import android.view.inputmethod.InlineSuggestionsResponse;
+import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodSubtype;
 import android.widget.Toast;
 
@@ -87,6 +88,7 @@ import helium314.keyboard.latin.utils.SubtypeSettings;
 import helium314.keyboard.latin.utils.SubtypeState;
 import helium314.keyboard.latin.utils.ToolbarMode;
 import helium314.keyboard.latin.voice.TextFixManager;
+import helium314.keyboard.latin.voice.VoiceDestinationGuard;
 import helium314.keyboard.latin.voice.VoiceInputManager;
 import helium314.keyboard.settings.SettingsActivity2;
 import kotlin.Unit;
@@ -153,6 +155,13 @@ public class LatinIME extends InputMethodService implements
      * dictated into one field can never land in another.
      */
     private String mVoiceTargetEditorId;
+    /** Monotonically identifies non-restarting input sessions, including fields with no view id. */
+    private long mInputSessionGeneration;
+    private long mVoiceTargetSessionGeneration = -1L;
+    private InputConnection mVoiceTargetInputConnection;
+    private int mVoiceTargetSelectionStart = Constants.NOT_A_CURSOR_POSITION;
+    private int mVoiceTargetSelectionEnd = Constants.NOT_A_CURSOR_POSITION;
+    private boolean mVoiceTargetSelectionChanged;
     private final android.os.Handler mTextFixOverlayHandler =
             new android.os.Handler(android.os.Looper.getMainLooper());
     private Runnable mTextFixErrorOverlayHideRunnable;
@@ -642,6 +651,11 @@ public class LatinIME extends InputMethodService implements
             @Override
             public void onRecordingStarted() {
                 mVoiceTargetEditorId = currentEditorIdentity();
+                mVoiceTargetSessionGeneration = mInputSessionGeneration;
+                mVoiceTargetInputConnection = getCurrentInputConnection();
+                mVoiceTargetSelectionStart = mInputLogic.mConnection.getExpectedSelectionStart();
+                mVoiceTargetSelectionEnd = mInputLogic.mConnection.getExpectedSelectionEnd();
+                mVoiceTargetSelectionChanged = false;
                 if (isVoiceHapticEnabled()) AudioAndHapticFeedbackManager.getInstance().vibrate(25L);
                 if (mSuggestionStripView != null) {
                     mSuggestionStripView.setVoiceTelemetryProvider(() ->
@@ -673,9 +687,19 @@ public class LatinIME extends InputMethodService implements
                 // a password box, while the upload is in flight. Committing blind there would leak
                 // dictated text into a field the user never authorised, so drop it instead.
                 final String target = mVoiceTargetEditorId;
-                mVoiceTargetEditorId = null;
+                final long targetSession = mVoiceTargetSessionGeneration;
+                final InputConnection targetConnection = mVoiceTargetInputConnection;
+                final int targetSelectionStart = mVoiceTargetSelectionStart;
+                final int targetSelectionEnd = mVoiceTargetSelectionEnd;
+                final boolean selectionChanged = mVoiceTargetSelectionChanged;
+                clearVoiceTarget();
                 final String current = currentEditorIdentity();
-                if (target == null || current == null || !target.equals(current)) {
+                if (targetConnection == null || targetConnection != getCurrentInputConnection()
+                        || !VoiceDestinationGuard.isUnchanged(
+                        target, current, targetSession, mInputSessionGeneration,
+                        targetSelectionStart, targetSelectionEnd,
+                        mInputLogic.mConnection.getExpectedSelectionStart(),
+                        mInputLogic.mConnection.getExpectedSelectionEnd(), selectionChanged)) {
                     Log.i(TAG, "Discarding transcription: editor changed since recording started");
                     Toast.makeText(LatinIME.this, R.string.voice_error_field_changed,
                             Toast.LENGTH_LONG).show();
@@ -694,6 +718,7 @@ public class LatinIME extends InputMethodService implements
 
             @Override
             public void onError(@NonNull final String message) {
+                clearVoiceTarget();
                 if (isVoiceHapticEnabled())
                     AudioAndHapticFeedbackManager.getInstance().vibrateVoiceError();
                 Toast.makeText(LatinIME.this, message, Toast.LENGTH_LONG).show();
@@ -851,9 +876,8 @@ public class LatinIME extends InputMethodService implements
     }
 
     /**
-     * A stable-enough fingerprint of the focused editor: package, view id and input type. All three
-     * survive a configuration change (so rotating mid-transcription still inserts), while a move to
-     * a different field or a different app changes at least one of them.
+     * A supplemental fingerprint of the focused editor. It is deliberately combined with an input
+     * session generation and selection snapshot because field ids may be missing or reused.
      */
     @Nullable
     private String currentEditorIdentity() {
@@ -1148,6 +1172,13 @@ public class LatinIME extends InputMethodService implements
     private void onStartInputInternal(final EditorInfo editorInfo, final boolean restarting) {
         super.onStartInput(editorInfo, restarting);
 
+        // EditorInfo.fieldId is frequently missing or reused. A non-restarting onStartInput is the
+        // authoritative boundary between input sessions, so include it in asynchronous voice
+        // destination validation even when the package, field id, and input type are identical.
+        if (!restarting) {
+            mInputSessionGeneration++;
+        }
+
         final RichInputMethodSubtype subtypeForApp = editorInfo == null
             ? null :
             mSettings.getSubtypeForApp(editorInfo.packageName);
@@ -1395,6 +1426,14 @@ public class LatinIME extends InputMethodService implements
             Log.i(TAG, "onUpdateSelection: oss=" + oldSelStart + ", ose=" + oldSelEnd
                     + ", nss=" + newSelStart + ", nse=" + newSelEnd
                     + ", cs=" + composingSpanStart + ", ce=" + composingSpanEnd);
+        }
+
+        // Do not let a transcription replace a selection that was created while its network
+        // request was in flight. Keep this sticky so moving away and back is still detected.
+        if (mVoiceTargetEditorId != null
+                && (newSelStart != mVoiceTargetSelectionStart
+                || newSelEnd != mVoiceTargetSelectionEnd)) {
+            mVoiceTargetSelectionChanged = true;
         }
 
         // This call happens whether our view is displayed or not, but if it's not then we should
@@ -2232,11 +2271,20 @@ public class LatinIME extends InputMethodService implements
         // Also abort an in-flight upload: when the user dismisses the keyboard mid-transcription
         // (Back key, app switch, finishInputView), they expect the network request to stop, not
         // to insert text into a stale field a few seconds later.
-        mVoiceTargetEditorId = null;
+        clearVoiceTarget();
         if (mVoiceInputManager != null
                 && mVoiceInputManager.getState() != VoiceInputManager.State.IDLE) {
             mVoiceInputManager.cancelRecording();
         }
+    }
+
+    private void clearVoiceTarget() {
+        mVoiceTargetEditorId = null;
+        mVoiceTargetSessionGeneration = -1L;
+        mVoiceTargetInputConnection = null;
+        mVoiceTargetSelectionStart = Constants.NOT_A_CURSOR_POSITION;
+        mVoiceTargetSelectionEnd = Constants.NOT_A_CURSOR_POSITION;
+        mVoiceTargetSelectionChanged = false;
     }
 
     public void stopVoiceRecording() {

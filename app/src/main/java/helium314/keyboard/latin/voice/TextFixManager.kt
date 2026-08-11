@@ -160,8 +160,6 @@ class TextFixManager(
             .trim().ifEmpty { variant.promptDefault }
         val useZdr = provider == AiProvider.OPENROUTER &&
             prefs.getBoolean(Settings.PREF_OPENROUTER_ZDR_ENABLED, Defaults.PREF_OPENROUTER_ZDR_ENABLED)
-        warnIfZeroDataRetentionUnenforceable(context, provider, model, useZdr)
-
         state = State.WORKING
         callbacks.onWorking()
 
@@ -180,6 +178,9 @@ class TextFixManager(
         activeJob = backgroundScope.launch(CoroutineName("TextFixRequest")) {
             try {
                 val proposed = sanitize(runInterruptible { client.fixText(input) })
+                if (client.didFallbackFromZdr) {
+                    mainHandler.post { warnAfterZdrFallback(context, model) }
+                }
                 if (proposed.isBlank()) {
                     finish(token, error = context.getString(R.string.text_fix_error_empty))
                     return@launch
@@ -190,6 +191,9 @@ class TextFixManager(
             } catch (e: InterruptedException) {
                 finish(token)
             } catch (e: Exception) {
+                if (client.didFallbackFromZdr) {
+                    mainHandler.post { warnAfterZdrFallback(context, model) }
+                }
                 Log.e(TAG, "Text fix failed", e)
                 finish(token, error = safeUserFacingError(context, e, R.string.text_fix_error_failed))
             }

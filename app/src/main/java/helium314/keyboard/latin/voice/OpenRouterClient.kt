@@ -46,6 +46,8 @@ class OpenRouterClient(
      * retry decision and inside the upload loops so a cancelled request stops sending audio.
      */
     @Volatile private var cancelled = false
+    @Volatile var didFallbackFromZdr: Boolean = false
+        private set
 
     companion object {
         private const val TAG = "OpenRouterClient"
@@ -53,9 +55,9 @@ class OpenRouterClient(
         private const val ENDPOINT = "$API_BASE/chat/completions"
         private const val OPENROUTER_TRANSCRIPTION_ENDPOINT = "$API_BASE/audio/transcriptions"
         const val KEY_ENDPOINT = "$API_BASE/key"
-        const val ZDR_ENDPOINT = "$API_BASE/endpoints/zdr"
         const val PAYPERQ_API_BASE = "https://api.ppq.ai"
         const val PAYPERQ_CHAT_ENDPOINT = "$PAYPERQ_API_BASE/chat/completions"
+        const val PAYPERQ_MODELS_ENDPOINT = "$PAYPERQ_API_BASE/v1/models"
         const val PAYPERQ_TRANSCRIPTION_ENDPOINT = "$PAYPERQ_API_BASE/v1/audio/transcriptions"
         const val PAYPERQ_AUDIO_MODELS_ENDPOINT = "$PAYPERQ_API_BASE/v1/audio/models"
         /** Template: call [modelEndpointUrl] to fill in the model id safely. */
@@ -103,13 +105,13 @@ class OpenRouterClient(
      * regardless of recording length. Throws [OpenRouterException] on non-retryable failures
      * or after retries are exhausted. The caller owns the file and must delete it.
      */
-    fun transcribe(audioFile: File): String = withRetries("Transcription") {
+    fun transcribe(audioFile: File): String = withOptionalZdr("Transcription") { enforceZdr ->
         if (provider == AiProvider.OPENROUTER && transcriptionMode == VoiceTranscriptionMode.OPENROUTER_STT) {
-            performOpenRouterSttTranscription(audioFile, useZeroDataRetention)
+            performOpenRouterSttTranscription(audioFile, enforceZdr)
         } else if (provider == AiProvider.PAYPERQ && "/" !in model) {
             performPayPerQTranscription(audioFile)
         } else {
-            performRequest(audioFile, useZeroDataRetention)
+            performRequest(audioFile, enforceZdr)
         }
     }
 
@@ -129,8 +131,22 @@ class OpenRouterClient(
      * reply. Uses [systemPrompt] as the system message. Retries transient failures with the
      * same policy as [transcribe].
      */
-    fun fixText(userText: String): String = withRetries("Request") {
-        performTextRequest(userText, useZeroDataRetention)
+    fun fixText(userText: String): String = withOptionalZdr("Request") { enforceZdr ->
+        performTextRequest(userText, enforceZdr)
+    }
+
+    private inline fun <T> withOptionalZdr(label: String, request: (Boolean) -> T): T {
+        val requestZdr = provider == AiProvider.OPENROUTER
+            && useZeroDataRetention
+        return try {
+            withRetries(label, requestZdr) { request(requestZdr) }
+        } catch (e: OpenRouterException) {
+            if (!requestZdr || !e.isZdrRouteUnavailable()) throw e
+            // ZDR is a preference, not a hard requirement. Retry once through normal routing so
+            // unsupported, custom, or temporarily unavailable ZDR routes do not break the feature.
+            didFallbackFromZdr = true
+            withRetries(label, false) { request(false) }
+        }
     }
 
     /**
@@ -139,10 +155,9 @@ class OpenRouterClient(
      * sleeps. Throws on the final attempt or non-retryable failures. The [label] is used only
      * for the terminal error message ("$label failed [after retries]").
      */
-    private inline fun <T> withRetries(label: String, request: () -> T): T {
+    private inline fun <T> withRetries(label: String, enforceZdr: Boolean, request: () -> T): T {
         var lastError: Exception? = null
         var nextDelayOverrideMs: Long = -1L
-        val enforceZdr = useZeroDataRetention
         var attempt = 0
         while (attempt < MAX_ATTEMPTS) {
             if (cancelled) throw InterruptedException()
@@ -253,14 +268,10 @@ class OpenRouterClient(
         return body.substring(0, placeholderIndex) to body.substring(placeholderIndex + AUDIO_PLACEHOLDER.length)
     }
 
-    private fun putProviderPreferences(body: JSONObject, enforceZdr: Boolean) {
+    internal fun putProviderPreferences(body: JSONObject, enforceZdr: Boolean) {
         if (!enforceZdr || provider != AiProvider.OPENROUTER) return
-        // Best-effort enforcement: emit `provider.zdr: true` only for catalog models we've
-        // verified have ZDR-eligible endpoints. For models without a known ZDR route (or
-        // custom slugs we can't classify) we skip enforcement so the request still succeeds —
-        // the goal is "use ZDR where possible", not "fail closed". The missing ZDR pill in
-        // the picker is the user-visible signal that strict ZDR isn't in effect.
-        if (!ModelCatalog.openRouterSupportsZdr(model)) return
+        // ZDR is a best-effort preference: every enabled OpenRouter request asks for it first.
+        // If routing cannot satisfy the constraint, withOptionalZdr retries without it.
         body.put("provider", JSONObject().apply { put("zdr", true) })
     }
 
@@ -650,13 +661,17 @@ class OpenRouterClient(
     }
 
     private fun OpenRouterException.isZdrRouteUnavailable(): Boolean {
-        if (statusCode !in setOf(400, 404, 409, 422)) return false
-        val lowerBody = errorBody.lowercase(Locale.US)
-        return lowerBody.contains("zdr") ||
-            lowerBody.contains("zero data") ||
-            lowerBody.contains("data retention") ||
-            lowerBody.contains("no endpoint")
+        return isZdrRouteUnavailable(statusCode, errorBody)
     }
+}
+
+internal fun isZdrRouteUnavailable(statusCode: Int, errorBody: String): Boolean {
+    if (statusCode !in setOf(400, 404, 409, 422)) return false
+    val lowerBody = errorBody.lowercase(Locale.US)
+    return lowerBody.contains("zdr") ||
+        lowerBody.contains("zero data") ||
+        lowerBody.contains("data retention") ||
+        lowerBody.contains("no endpoint")
 }
 
 class OpenRouterException(

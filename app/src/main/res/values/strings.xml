@@ -1107,7 +1107,13 @@ New dictionary:
     <!-- Voice Input -->
     <string name="voice_input_title">Voice Input</string>
     <string name="voice_input_enabled">Enable Voice Input</string>
-    <string name="voice_input_enabled_summary">After adding a provider API key, enable this and long-press Return to record and transcribe</string>
+    <string name="voice_input_enabled_summary">Enable this, pick a speech engine, then long-press Return to record and transcribe. The Cloud AI engine also needs a provider API key.</string>
+    <string name="voice_speech_engine">Speech engine</string>
+    <string name="voice_speech_engine_summary">Which engine turns your speech into text</string>
+    <string name="voice_speech_engine_cloud">Cloud AI</string>
+    <string name="voice_speech_engine_on_device">On-device (offline)</string>
+    <string name="voice_speech_engine_cloud_description">Uploads the recording to your AI provider. Best accuracy, needs an API key and a connection.</string>
+    <string name="voice_speech_engine_on_device_description">Uses Android\'s offline recogniser. No API key, no connection, and nothing you say leaves the device. Auto-polish is skipped, since it would send the text to the cloud. Needs Android 12+ and the offline language pack for your keyboard language.</string>
     <string name="ai_provider">AI Provider</string>
     <string name="ai_provider_openrouter">OpenRouter</string>
     <string name="ai_provider_payperq">PayPerQ</string>
@@ -1155,6 +1161,9 @@ New dictionary:
     <string name="voice_error_sensitive_field">Voice input is unavailable in sensitive fields</string>
     <string name="voice_error_unsupported_field">Voice input is unavailable in this field</string>
     <string name="voice_error_stt_openrouter_only">Dedicated STT is only available with OpenRouter</string>
+    <string name="voice_error_on_device_unavailable">On-device speech recognition is unavailable on this device. It needs Android 12 or newer and a system speech service with an offline model.</string>
+    <string name="voice_error_on_device_language">No offline language pack for this language. Install it in the system speech recognition settings, or switch the speech engine to Cloud AI.</string>
+    <string name="voice_error_on_device_failed">On-device recognition failed</string>
     <string name="voice_error_transcription_failed">Transcription failed</string>
     <string name="voice_error_rate_limited">AI provider rate limit reached — try again in a moment</string>
     <string name="voice_max_duration_reached">Maximum recording length reached — transcribing&#8230;</string>

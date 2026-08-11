@@ -30,6 +30,7 @@ import helium314.keyboard.latin.utils.Log
 import helium314.keyboard.latin.utils.ToolbarKey
 import helium314.keyboard.latin.utils.prefs
 import helium314.keyboard.latin.utils.toolbarKeyStrings
+import helium314.keyboard.latin.voice.SpeechEngine
 
 // taken from FlorisBoard, modified (see also KeyData)
 
@@ -262,7 +263,13 @@ sealed interface KeyData : AbstractKeyData {
                 Settings.PREF_VOICE_STT_ENABLED,
                 Defaults.PREF_VOICE_STT_ENABLED
             )
-            if (!traditionalEnabled) {
+            // The on-device engine has exactly one entry point: the mic button. Its two toggles are
+            // hidden in settings while that engine is selected, so honouring a stale "traditional
+            // off / STT on" combination here would leave the user with no way to dictate at all.
+            val onDeviceEngine = SpeechEngine.fromPref(
+                prefs.getString(Settings.PREF_VOICE_SPEECH_ENGINE, Defaults.PREF_VOICE_SPEECH_ENGINE)
+            ) == SpeechEngine.ON_DEVICE
+            if (!traditionalEnabled && !onDeviceEngine) {
                 present.remove("!icon/shortcut_key|!code/key_voice_input")
             }
             // Pull in the optional second text-fix entry only when its pref is on AND the
@@ -272,8 +279,11 @@ sealed interface KeyData : AbstractKeyData {
                 val tf2 = "!icon/text_fix_2_key|!code/key_text_fix_2"
                 if (tf2 !in present) present.add(tf2)
             }
-            if (sttEnabled) {
-                val stt = "!icon/stt_action_key|!code/key_voice_stt_input"
+            val stt = "!icon/stt_action_key|!code/key_voice_stt_input"
+            if (onDeviceEngine) {
+                // OpenRouter's transcription endpoint is unreachable on this engine by design.
+                present.remove(stt)
+            } else if (sttEnabled) {
                 if (stt !in present) present.add(stt)
             }
             if (present.isEmpty()) return
