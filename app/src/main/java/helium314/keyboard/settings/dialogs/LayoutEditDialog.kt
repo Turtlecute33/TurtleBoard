@@ -117,7 +117,6 @@ fun LayoutEditDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false, dismissOnBackPress = false),
         modifier = Modifier.windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.systemBars))
             .padding(horizontal = 16.dp), // dialog is rather wide, but shouldn't go all the way to the screen edges
-        reducePadding = true,
     )
 }
 

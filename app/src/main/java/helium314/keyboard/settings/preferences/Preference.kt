@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
@@ -41,15 +41,70 @@ fun PreferenceCategory(
     title: String,
     modifier: Modifier = Modifier,
 ) {
-    Column {
-        HorizontalDivider()
-        Text(
-            text = title,
-            modifier = modifier.padding(top = 12.dp, start = 16.dp, end = 8.dp, bottom = 8.dp),
-            color = MaterialTheme.colorScheme.secondary,
-            style = MaterialTheme.typography.titleSmall
-        )
+    // No divider: the rows below carry their own grouped card, so a rule here would draw a second,
+    // competing separator. Aligned to the card's 16dp inset plus the row's own 16dp padding.
+    Text(
+        text = title,
+        modifier = modifier.padding(top = 20.dp, start = 32.dp, end = 24.dp, bottom = 8.dp),
+        color = MaterialTheme.colorScheme.primary,
+        style = MaterialTheme.typography.titleSmall
+    )
+}
+
+/**
+ * Where a row sits inside its visual group, which decides how its card corners are rounded.
+ *
+ * Rows are wrapped individually rather than a whole group being placed inside one `Card`, so the
+ * list stays lazy: a card wrapping 20 rows would force all 20 to compose (and register their
+ * preference listeners) the moment any part of the group scrolled into view.
+ */
+enum class PreferenceGroupPosition { SINGLE, FIRST, MIDDLE, LAST }
+
+/**
+ * Position of every row in [rows], where a heading (per [isCategory]) breaks the run. A group is a
+ * stretch of consecutive non-heading rows; headings themselves get [PreferenceGroupPosition.SINGLE]
+ * and never render a card.
+ *
+ * Resolved once per settings list rather than while drawing, so a row never has to inspect its
+ * neighbours during composition.
+ */
+internal fun <T> preferenceGroupPositions(rows: List<T>, isCategory: (T) -> Boolean): List<PreferenceGroupPosition> =
+    rows.mapIndexed { index, row ->
+        if (isCategory(row)) return@mapIndexed PreferenceGroupPosition.SINGLE
+        val startsGroup = index == 0 || isCategory(rows[index - 1])
+        val endsGroup = index == rows.lastIndex || isCategory(rows[index + 1])
+        when {
+            startsGroup && endsGroup -> PreferenceGroupPosition.SINGLE
+            startsGroup -> PreferenceGroupPosition.FIRST
+            endsGroup -> PreferenceGroupPosition.LAST
+            else -> PreferenceGroupPosition.MIDDLE
+        }
     }
+
+private val GROUP_OUTER_CORNER = 20.dp
+private val GROUP_INNER_CORNER = 4.dp
+
+/** Rounded, tonal background that makes consecutive rows read as one grouped section. */
+@Composable
+fun PreferenceGroupSurface(
+    position: PreferenceGroupPosition,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val top = if (position == PreferenceGroupPosition.FIRST || position == PreferenceGroupPosition.SINGLE)
+        GROUP_OUTER_CORNER else GROUP_INNER_CORNER
+    val bottom = if (position == PreferenceGroupPosition.LAST || position == PreferenceGroupPosition.SINGLE)
+        GROUP_OUTER_CORNER else GROUP_INNER_CORNER
+    Surface(
+        modifier = modifier.padding(
+            horizontal = 16.dp,
+            // A hairline gap between rows is what separates them now that the divider is gone.
+            vertical = 1.dp,
+        ),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = RoundedCornerShape(topStart = top, topEnd = top, bottomStart = bottom, bottomEnd = bottom),
+        content = content,
+    )
 }
 
 @Composable
@@ -80,9 +135,10 @@ fun Preference(
                     onValueChange = { onClick() },
                 )
             )
-            .heightIn(min = 48.dp)
-            .padding(vertical = 10.dp, horizontal = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+            // 16dp horizontal and a 56dp minimum are the Material 3 list-item metrics.
+            .heightIn(min = 56.dp)
+            .padding(vertical = 12.dp, horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (icon != null)

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package helium314.keyboard.settings.screens
 
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -26,9 +28,19 @@ import helium314.keyboard.settings.SearchSettingsScreen
 import helium314.keyboard.latin.utils.Theme
 import helium314.keyboard.settings.initPreview
 import helium314.keyboard.settings.preferences.Preference
+import helium314.keyboard.settings.preferences.PreferenceGroupSurface
+import helium314.keyboard.settings.preferences.preferenceGroupPositions
 import helium314.keyboard.latin.utils.previewDark
 import helium314.keyboard.settings.screens.gesturedata.END_DATE_EPOCH_MILLIS
 import helium314.keyboard.settings.screens.gesturedata.TWO_WEEKS_IN_MILLIS
+
+/** One row on the main settings screen: a screen to open, its icon, and an optional summary. */
+private class MainEntry(
+    @StringRes val title: Int,
+    @DrawableRes val icon: Int,
+    val onClick: () -> Unit,
+    val description: String? = null,
+)
 
 @Composable
 fun MainSettingsScreen(
@@ -53,82 +65,47 @@ fun MainSettingsScreen(
         settings = emptyList(),
     ) {
         val enabledSubtypes = SubtypeSettings.getEnabledSubtypes(true)
+        // Built as data first so the rows can be grouped into one rounded card. Two of them are
+        // conditional, so the positions have to come from the list that is actually shown — a
+        // hardcoded "last row is the bottom corner" would round the wrong row on a build without
+        // the gesture library.
+        val entries = buildList {
+            add(MainEntry(R.string.language_and_layouts_title, R.drawable.ic_settings_languages, onClickLanguage,
+                enabledSubtypes.joinToString(", ") { it.displayName() }))
+            add(MainEntry(R.string.settings_screen_preferences, R.drawable.ic_settings_preferences, onClickPreferences))
+            add(MainEntry(R.string.settings_screen_appearance, R.drawable.ic_settings_appearance, onClickAppearance))
+            add(MainEntry(R.string.settings_screen_toolbar, R.drawable.ic_settings_toolbar, onClickToolbar))
+            add(MainEntry(R.string.settings_screen_voice, R.drawable.sym_keyboard_voice_rounded, onClickVoice))
+            add(MainEntry(R.string.settings_screen_text_fix, R.drawable.ic_text_fix, onClickTextFix))
+            if (JniUtils.sHaveGestureLib)
+                add(MainEntry(R.string.settings_screen_gesture, R.drawable.ic_settings_gesture, onClickGestureTyping))
+            // we don't even show the menu if data gathering phase ended more than 2 weeks ago
+            if (BuildConfig.ENABLE_GESTURE_DATA_GATHERING
+                && JniUtils.sHaveGestureLib
+                && System.currentTimeMillis() < END_DATE_EPOCH_MILLIS + TWO_WEEKS_IN_MILLIS
+            )
+                add(MainEntry(R.string.gesture_data_screen, R.drawable.ic_settings_gesture, onClickDataGathering))
+            add(MainEntry(R.string.settings_screen_correction, R.drawable.ic_settings_correction, onClickTextCorrection))
+            add(MainEntry(R.string.settings_screen_secondary_layouts, R.drawable.ic_ime_switcher, onClickLayouts))
+            add(MainEntry(R.string.dictionary_settings_category, R.drawable.ic_dictionary, onClickDictionaries))
+            add(MainEntry(R.string.settings_screen_advanced, R.drawable.ic_settings_advanced, onClickAdvanced))
+            add(MainEntry(R.string.settings_screen_about, R.drawable.ic_settings_about, onClickAbout))
+        }
+        val positions = preferenceGroupPositions(entries) { false }
         Scaffold(contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)) { innerPadding ->
             Column(
                 Modifier.verticalScroll(rememberScrollState()).then(Modifier.padding(innerPadding))
             ) {
-                Preference(
-                    name = stringResource(R.string.language_and_layouts_title),
-                    description = enabledSubtypes.joinToString(", ") { it.displayName() },
-                    onClick = onClickLanguage,
-                    icon = R.drawable.ic_settings_languages
-                ) { NextScreenIcon() }
-                Preference(
-                    name = stringResource(R.string.settings_screen_preferences),
-                    onClick = onClickPreferences,
-                    icon = R.drawable.ic_settings_preferences
-                ) { NextScreenIcon() }
-                Preference(
-                    name = stringResource(R.string.settings_screen_appearance),
-                    onClick = onClickAppearance,
-                    icon = R.drawable.ic_settings_appearance
-                ) { NextScreenIcon() }
-                Preference(
-                    name = stringResource(R.string.settings_screen_toolbar),
-                    onClick = onClickToolbar,
-                    icon = R.drawable.ic_settings_toolbar
-                ) { NextScreenIcon() }
-                Preference(
-                    name = stringResource(R.string.settings_screen_voice),
-                    onClick = onClickVoice,
-                    icon = R.drawable.sym_keyboard_voice_rounded
-                ) { NextScreenIcon() }
-                Preference(
-                    name = stringResource(R.string.settings_screen_text_fix),
-                    onClick = onClickTextFix,
-                    icon = R.drawable.ic_text_fix
-                ) { NextScreenIcon() }
-                if (JniUtils.sHaveGestureLib)
-                    Preference(
-                        name = stringResource(R.string.settings_screen_gesture),
-                        onClick = onClickGestureTyping,
-                        icon = R.drawable.ic_settings_gesture
-                    ) { NextScreenIcon() }
-                // we don't even show the menu if data gathering phase ended more than 2 weeks ago
-                if (BuildConfig.ENABLE_GESTURE_DATA_GATHERING
-                    && JniUtils.sHaveGestureLib
-                    && System.currentTimeMillis() < END_DATE_EPOCH_MILLIS + TWO_WEEKS_IN_MILLIS
-                )
-                    Preference(
-                        name = stringResource(R.string.gesture_data_screen),
-                        onClick = onClickDataGathering,
-                        icon = R.drawable.ic_settings_gesture
-                    ) { NextScreenIcon() }
-                Preference(
-                    name = stringResource(R.string.settings_screen_correction),
-                    onClick = onClickTextCorrection,
-                    icon = R.drawable.ic_settings_correction
-                ) { NextScreenIcon() }
-                Preference(
-                    name = stringResource(R.string.settings_screen_secondary_layouts),
-                    onClick = onClickLayouts,
-                    icon = R.drawable.ic_ime_switcher
-                ) { NextScreenIcon() }
-                Preference(
-                    name = stringResource(R.string.dictionary_settings_category),
-                    onClick = onClickDictionaries,
-                    icon = R.drawable.ic_dictionary
-                ) { NextScreenIcon() }
-                Preference(
-                    name = stringResource(R.string.settings_screen_advanced),
-                    onClick = onClickAdvanced,
-                    icon = R.drawable.ic_settings_advanced
-                ) { NextScreenIcon() }
-                Preference(
-                    name = stringResource(R.string.settings_screen_about),
-                    onClick = onClickAbout,
-                    icon = R.drawable.ic_settings_about
-                ) { NextScreenIcon() }
+                entries.forEachIndexed { index, entry ->
+                    PreferenceGroupSurface(positions[index]) {
+                        Preference(
+                            name = stringResource(entry.title),
+                            description = entry.description,
+                            onClick = entry.onClick,
+                            icon = entry.icon,
+                        ) { NextScreenIcon() }
+                    }
+                }
             }
         }
     }

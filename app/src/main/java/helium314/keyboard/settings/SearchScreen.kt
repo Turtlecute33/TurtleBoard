@@ -21,6 +21,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -29,7 +30,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldColors
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -41,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -51,6 +54,9 @@ import helium314.keyboard.latin.utils.BackButton
 import helium314.keyboard.latin.utils.CloseIcon
 import helium314.keyboard.latin.utils.SearchIcon
 import helium314.keyboard.settings.preferences.PreferenceCategory
+import helium314.keyboard.settings.preferences.PreferenceGroupPosition
+import helium314.keyboard.settings.preferences.PreferenceGroupSurface
+import helium314.keyboard.settings.preferences.preferenceGroupPositions
 
 @Composable
 fun SearchSettingsScreen(
@@ -78,9 +84,11 @@ fun SearchSettingsScreen(
                 // included, on something as small as flipping one switch. Duplicate values (the same
                 // category heading twice on one screen) get an occurrence suffix so keys stay unique
                 // without reintroducing that coupling.
+                // Group positions are resolved here, alongside the keys, so each row knows which
+                // corners to round without the list having to look at its neighbours while drawing.
                 val visibleItems = remember(settings) {
                     val occurrences = HashMap<String, Int>()
-                    settings.mapNotNull { value ->
+                    val rows = settings.mapNotNull { value ->
                         value?.let {
                             val base = "${it.javaClass.simpleName}:$it"
                             val seen = (occurrences[base] ?: 0) + 1
@@ -88,6 +96,8 @@ fun SearchSettingsScreen(
                             (if (seen == 1) base else "$base#$seen") to it
                         }
                     }
+                    val positions = preferenceGroupPositions(rows) { (_, value) -> value is Int }
+                    rows.mapIndexed { index, (key, value) -> Triple(key, value, positions[index]) }
                 }
                 Scaffold(
                     contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
@@ -95,13 +105,15 @@ fun SearchSettingsScreen(
                     LazyColumn(contentPadding = innerPadding) {
                         items(
                             items = visibleItems,
-                            key = { (key, _) -> key },
-                            contentType = { (_, value) -> if (value is Int) "category" else "pref" },
-                        ) { (_, value) ->
+                            key = { (key, _, _) -> key },
+                            contentType = { (_, value, _) -> if (value is Int) "category" else "pref" },
+                        ) { (_, value, position) ->
                             if (value is Int) {
                                 PreferenceCategory(stringResource(value))
                             } else {
-                                SettingsActivity.settingsContainer[value]?.Preference()
+                                PreferenceGroupSurface(position) {
+                                    SettingsActivity.settingsContainer[value]?.Preference()
+                                }
                             }
                         }
                     }
@@ -129,7 +141,14 @@ fun <T: Any?> SearchScreen(
     // keyboard in unexpected situations such as going back from another screen, which is rather annoying
     var searchText by remember { mutableStateOf(TextFieldValue()) }
     var showSearch by remember { mutableStateOf(false) }
-    Scaffold(contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top))
+    // The large title collapses as the content scrolls, the way Android's own Settings behaves.
+    // Nested scroll bubbles up from whichever scrollable the screen puts in `content`, so the inner
+    // LazyColumn (or a screen's own verticalScroll Column) drives this without extra wiring.
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top)
+    )
     { innerPadding ->
         Column(Modifier.fillMaxSize().padding(innerPadding)) {
 
@@ -145,9 +164,14 @@ fun <T: Any?> SearchScreen(
                 color = MaterialTheme.colorScheme.surfaceContainer,
             ) {
                 Column {
-                    TopAppBar(
+                    LargeTopAppBar(
                         title = title,
                         windowInsets = WindowInsets(0),
+                        scrollBehavior = scrollBehavior,
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                            scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                        ),
                         navigationIcon = {
                             BackButton {
                                 if (showSearch) setShowSearch(false)
@@ -208,7 +232,11 @@ fun <T: Any?> SearchScreen(
                     ) { innerPadding ->
                         LazyColumn(contentPadding = innerPadding) {
                             items(items, key = { it ?: "__null_item__" }) {
-                                itemContent(it)
+                                // Search results have no categories to group by, so each hit is its
+                                // own card.
+                                PreferenceGroupSurface(PreferenceGroupPosition.SINGLE) {
+                                    itemContent(it)
+                                }
                             }
                         }
                     }

@@ -49,7 +49,6 @@ fun TextInputDialog(
     isPassword: Boolean = false,
     keyboardType: KeyboardType = KeyboardType.Unspecified,
     properties: DialogProperties = DialogProperties(),
-    reducePadding: Boolean = false,
     checkTextValid: (text: String) -> Boolean = { it.isNotBlank() }
 ) {
     val initialValue = TextFieldValue(
@@ -103,7 +102,6 @@ fun TextInputDialog(
             }
         },
         properties = properties,
-        reducePadding = reducePadding,
     )
 }
 
