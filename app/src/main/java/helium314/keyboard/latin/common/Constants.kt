@@ -17,6 +17,12 @@ object Links {
     const val GESTURE_DATA_VIDEO_YOUTUBE = "https://youtu.be/CyjumVTWtJA"
     const val SWIPE_O_SCOPE = "https://codeberg.org/eclexic/swipe-o-scope"
     const val GESTURE_DATA_WIKI = "$WIKI_URL/Tutorial:-How-to-Contribute-Gesture-Data"
+    /**
+     * Google's "Speech Recognition & Synthesis" app, which supplies the on-device recognition
+     * service on most Android devices. Installing it is what makes the offline speech engine
+     * selectable when the device ships without a recogniser of its own.
+     */
+    const val ON_DEVICE_SPEECH_SERVICE = "https://play.google.com/store/apps/details?id=com.google.android.tts"
 }
 
 val combiningRange = 0x300..0x35b

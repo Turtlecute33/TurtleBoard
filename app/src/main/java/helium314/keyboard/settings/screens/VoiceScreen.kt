@@ -3,6 +3,7 @@ package helium314.keyboard.settings.screens
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -25,7 +26,9 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.content.edit
+import androidx.core.net.toUri
 import helium314.keyboard.keyboard.KeyboardSwitcher
+import helium314.keyboard.latin.common.Links
 import java.net.HttpURLConnection
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -57,6 +60,7 @@ import helium314.keyboard.settings.Setting
 import helium314.keyboard.settings.dialogs.ConfirmationDialog
 import helium314.keyboard.settings.dialogs.ListPickerDialog
 import helium314.keyboard.settings.dialogs.TextInputDialog
+import helium314.keyboard.settings.dialogs.ThreeButtonAlertDialog
 import helium314.keyboard.settings.initPreview
 import helium314.keyboard.settings.preferences.ListPreference
 import helium314.keyboard.settings.preferences.ModelListPreference
@@ -269,24 +273,8 @@ fun createVoiceSettings(context: Context) = listOf(
         Settings.PREF_VOICE_SPEECH_ENGINE,
         R.string.voice_speech_engine,
         R.string.voice_speech_engine_summary
-    ) { setting ->
-        val ctx = LocalContext.current
-        val unavailableMessage = stringResource(R.string.voice_error_on_device_unavailable)
-        val items = listOf(
-            ctx.getString(R.string.voice_speech_engine_cloud) to SpeechEngine.CLOUD.prefValue,
-            ctx.getString(R.string.voice_speech_engine_on_device) to SpeechEngine.ON_DEVICE.prefValue,
-        )
-        ListPreference(setting, items, Defaults.PREF_VOICE_SPEECH_ENGINE) { value ->
-            // Saved either way: availability is a device capability the user may still be able to
-            // fix (installing a speech service), and silently refusing the choice would be worse
-            // than telling them why dictation will not work yet.
-            if (SpeechEngine.fromPref(value) == SpeechEngine.ON_DEVICE &&
-                !isOnDeviceRecognitionAvailable(ctx)
-            ) {
-                Toast.makeText(ctx, unavailableMessage, Toast.LENGTH_LONG).show()
-            }
-            KeyboardSwitcher.getInstance().setThemeNeedsReload()
-        }
+    ) {
+        VoiceSpeechEnginePreference(it)
     },
     Setting(context, Settings.PREF_AI_PROVIDER, R.string.ai_provider) { setting ->
         val ctx = LocalContext.current
@@ -510,6 +498,108 @@ fun createVoiceSettings(context: Context) = listOf(
         )
     },
 )
+
+/**
+ * Whether [engine] may be selected. The on-device engine is the only one a device can fail to
+ * support, and selecting it there would leave every dictation failing at the microphone.
+ */
+internal fun canSelectSpeechEngine(engine: SpeechEngine, onDeviceAvailable: Boolean): Boolean =
+    engine != SpeechEngine.ON_DEVICE || onDeviceAvailable
+
+/** Picker label for [engine], flagging the on-device entry when the device cannot run it. */
+@StringRes
+internal fun speechEngineLabelRes(engine: SpeechEngine, onDeviceAvailable: Boolean): Int = when {
+    engine == SpeechEngine.CLOUD -> R.string.voice_speech_engine_cloud
+    onDeviceAvailable -> R.string.voice_speech_engine_on_device
+    else -> R.string.voice_speech_engine_on_device_unavailable
+}
+
+/**
+ * Engine picker that refuses to select the on-device engine on a device that cannot run it.
+ *
+ * A plain [ListPreference] would save first and complain second, leaving the user on an engine that
+ * fails at every dictation. Selecting it here is blocked instead, and the user gets the steps that
+ * actually make it work.
+ */
+@Composable
+private fun VoiceSpeechEnginePreference(setting: Setting) {
+    val ctx = LocalContext.current
+    val prefs = ctx.prefs()
+    val selectedValue by rememberStringPreferenceState(setting.key, Defaults.PREF_VOICE_SPEECH_ENGINE)
+    var showPicker by rememberSaveable { mutableStateOf(false) }
+    var showSetupGuide by rememberSaveable { mutableStateOf(false) }
+    // Probed on demand, not on every recomposition: this queries the PackageManager, and the
+    // settings list recomposes far more often than a speech service gets installed. Re-probed when
+    // the picker opens so returning from the system settings screen immediately unblocks the option.
+    var availabilityProbe by remember { mutableIntStateOf(0) }
+    val onDeviceAvailable = remember(availabilityProbe) { isOnDeviceRecognitionAvailable(ctx) }
+
+    val items = SpeechEngine.entries.map {
+        stringResource(speechEngineLabelRes(it, onDeviceAvailable)) to it.prefValue
+    }
+    val selectedItem = items.firstOrNull { it.second == selectedValue }
+
+    Preference(
+        name = setting.title,
+        description = selectedItem?.first,
+        onClick = {
+            availabilityProbe++
+            showPicker = true
+        },
+    )
+    if (showPicker) {
+        ListPickerDialog(
+            onDismissRequest = { showPicker = false },
+            items = items,
+            onItemSelected = { item ->
+                // Re-probed rather than reusing onDeviceAvailable: the user may have installed a
+                // speech service since the picker opened.
+                if (!canSelectSpeechEngine(SpeechEngine.fromPref(item.second), isOnDeviceRecognitionAvailable(ctx))) {
+                    availabilityProbe++
+                    showSetupGuide = true
+                    return@ListPickerDialog
+                }
+                if (item.second == selectedValue) return@ListPickerDialog
+                prefs.edit { putString(setting.key, item.second) }
+                // The engine decides which voice buttons the long-press Return menu offers.
+                KeyboardSwitcher.getInstance().setThemeNeedsReload()
+            },
+            selectedItem = selectedItem,
+            title = { Text(setting.title) },
+            getItemName = { it.first },
+        )
+    }
+    if (showSetupGuide) {
+        val noSettingsScreenMessage = stringResource(R.string.voice_on_device_settings_unavailable)
+        // ThreeButtonAlertDialog rather than ConfirmationDialog: the setup steps are long enough to
+        // clip on a short screen without scrollContent. "Get the app" deliberately leaves the dialog
+        // open, so the user can come straight back for the settings step.
+        ThreeButtonAlertDialog(
+            onDismissRequest = { showSetupGuide = false },
+            title = { Text(stringResource(R.string.voice_on_device_unavailable_title)) },
+            content = { Text(stringResource(R.string.voice_on_device_unavailable_message)) },
+            scrollContent = true,
+            confirmButtonText = stringResource(R.string.voice_on_device_open_settings),
+            onConfirmed = {
+                // Package visibility makes resolveActivity unreliable for another app's settings
+                // screen, so just try it and report the miss.
+                runCatching {
+                    ctx.startActivity(Intent(android.provider.Settings.ACTION_VOICE_INPUT_SETTINGS))
+                }.onFailure {
+                    Toast.makeText(ctx, noSettingsScreenMessage, Toast.LENGTH_LONG).show()
+                }
+            },
+            neutralButtonText = stringResource(R.string.voice_on_device_get_app),
+            onNeutral = {
+                runCatching {
+                    ctx.startActivity(Intent(Intent.ACTION_VIEW, Links.ON_DEVICE_SPEECH_SERVICE.toUri()))
+                }.onFailure {
+                    Toast.makeText(ctx, noSettingsScreenMessage, Toast.LENGTH_LONG).show()
+                }
+            },
+        )
+    }
+}
 
 @Composable
 private fun VoiceApiKeyPreference(setting: Setting, provider: AiProvider) {

@@ -1112,6 +1112,12 @@ New dictionary:
     <string name="voice_speech_engine_summary">Which engine turns your speech into text</string>
     <string name="voice_speech_engine_cloud">Cloud AI</string>
     <string name="voice_speech_engine_on_device">On-device (offline)</string>
+    <string name="voice_speech_engine_on_device_unavailable">On-device (offline) — not installed</string>
+    <string name="voice_on_device_unavailable_title">Offline dictation is not installed</string>
+    <string name="voice_on_device_unavailable_message">This device has no speech recognition service with an offline model, so WisprBoard cannot dictate without a connection. The engine stays on Cloud AI until you add one.\n\nTo set it up:\n\n1. Install a speech recognition service. On most devices this is Google\'s “Speech Recognition &amp; Synthesis” app.\n\n2. Download the language you dictate in. Open Settings → System → Languages &amp; input → On-device speech recognition. On some devices this is in the Google app instead, under Settings → Voice → Offline speech recognition.\n\n3. Come back here and select On-device again.</string>
+    <string name="voice_on_device_open_settings">Open speech settings</string>
+    <string name="voice_on_device_get_app">Get the app</string>
+    <string name="voice_on_device_settings_unavailable">This device has no speech settings screen to open</string>
     <string name="voice_speech_engine_cloud_description">Uploads the recording to your AI provider. Best accuracy, needs an API key and a connection.</string>
     <string name="voice_speech_engine_on_device_description">Uses Android\'s offline recogniser. No API key, no connection, and nothing you say leaves the device. Auto-polish is skipped, since it would send the text to the cloud. Needs Android 12+ and the offline language pack for your keyboard language.</string>
     <string name="ai_provider">AI Provider</string>

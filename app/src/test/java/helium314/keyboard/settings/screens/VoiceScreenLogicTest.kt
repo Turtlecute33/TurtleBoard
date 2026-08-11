@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package helium314.keyboard.settings.screens
 
+import helium314.keyboard.latin.R
 import helium314.keyboard.latin.settings.Defaults
 import helium314.keyboard.latin.settings.Settings
 import helium314.keyboard.latin.voice.AiProvider
@@ -12,6 +13,7 @@ import helium314.keyboard.latin.voice.supportsVoiceSlug
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -172,6 +174,37 @@ class VoiceScreenLogicTest {
 
         assertFalse(Settings.PREF_VOICE_AUTO_STOP_SILENCE_SECONDS in autoStopOffItems)
         assertTrue(Settings.PREF_VOICE_AUTO_STOP_SILENCE_SECONDS in autoStopOnItems)
+    }
+
+    @Test
+    fun onDeviceEngineCannotBeSelectedWithoutDeviceSupport() {
+        // Saving it anyway would leave every dictation failing at the microphone, with the settings
+        // screen insisting the engine is active. Cloud must stay selectable no matter what.
+        assertFalse(canSelectSpeechEngine(SpeechEngine.ON_DEVICE, onDeviceAvailable = false))
+        assertTrue(canSelectSpeechEngine(SpeechEngine.ON_DEVICE, onDeviceAvailable = true))
+        assertTrue(canSelectSpeechEngine(SpeechEngine.CLOUD, onDeviceAvailable = false))
+        assertTrue(canSelectSpeechEngine(SpeechEngine.CLOUD, onDeviceAvailable = true))
+    }
+
+    @Test
+    fun unsupportedOnDeviceEngineIsLabelledAsNotInstalled() {
+        assertEquals(
+            R.string.voice_speech_engine_on_device_unavailable,
+            speechEngineLabelRes(SpeechEngine.ON_DEVICE, onDeviceAvailable = false)
+        )
+        assertEquals(
+            R.string.voice_speech_engine_on_device,
+            speechEngineLabelRes(SpeechEngine.ON_DEVICE, onDeviceAvailable = true)
+        )
+        // The cloud label never changes with a capability it does not depend on.
+        assertEquals(
+            R.string.voice_speech_engine_cloud,
+            speechEngineLabelRes(SpeechEngine.CLOUD, onDeviceAvailable = false)
+        )
+        assertEquals(
+            R.string.voice_speech_engine_cloud,
+            speechEngineLabelRes(SpeechEngine.CLOUD, onDeviceAvailable = true)
+        )
     }
 
     @Test
