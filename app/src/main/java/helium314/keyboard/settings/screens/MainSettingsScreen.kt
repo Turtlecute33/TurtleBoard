@@ -29,6 +29,7 @@ import helium314.keyboard.latin.utils.Theme
 import helium314.keyboard.settings.initPreview
 import helium314.keyboard.settings.preferences.Preference
 import helium314.keyboard.settings.preferences.PreferenceGroupSurface
+import helium314.keyboard.settings.preferences.PreferenceListVerticalPadding
 import helium314.keyboard.settings.preferences.preferenceGroupPositions
 import helium314.keyboard.latin.utils.previewDark
 import helium314.keyboard.settings.screens.gesturedata.END_DATE_EPOCH_MILLIS
@@ -94,7 +95,11 @@ fun MainSettingsScreen(
         val positions = preferenceGroupPositions(entries) { false }
         Scaffold(contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)) { innerPadding ->
             Column(
-                Modifier.verticalScroll(rememberScrollState()).then(Modifier.padding(innerPadding))
+                Modifier.verticalScroll(rememberScrollState())
+                    .then(Modifier.padding(innerPadding))
+                    // Clears the app bar above and the bottom edge below, matching the padding the
+                    // other settings screens get from their LazyColumn.
+                    .padding(vertical = PreferenceListVerticalPadding)
             ) {
                 entries.forEachIndexed { index, entry ->
                     PreferenceGroupSurface(positions[index]) {

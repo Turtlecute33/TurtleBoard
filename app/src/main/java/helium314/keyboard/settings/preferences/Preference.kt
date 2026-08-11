@@ -84,6 +84,13 @@ internal fun <T> preferenceGroupPositions(rows: List<T>, isCategory: (T) -> Bool
 private val GROUP_OUTER_CORNER = 20.dp
 private val GROUP_INNER_CORNER = 4.dp
 
+/**
+ * Breathing room above the first card and below the last one, so a group never butts up against the
+ * app bar or the bottom edge. Matches the 16dp the cards are inset by, keeping the gap around a
+ * group even on all four sides.
+ */
+val PreferenceListVerticalPadding = 16.dp
+
 /** Rounded, tonal background that makes consecutive rows read as one grouped section. */
 @Composable
 fun PreferenceGroupSurface(

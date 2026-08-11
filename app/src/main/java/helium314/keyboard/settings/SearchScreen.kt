@@ -6,8 +6,11 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.only
@@ -44,6 +47,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -56,6 +60,7 @@ import helium314.keyboard.latin.utils.SearchIcon
 import helium314.keyboard.settings.preferences.PreferenceCategory
 import helium314.keyboard.settings.preferences.PreferenceGroupPosition
 import helium314.keyboard.settings.preferences.PreferenceGroupSurface
+import helium314.keyboard.settings.preferences.PreferenceListVerticalPadding
 import helium314.keyboard.settings.preferences.preferenceGroupPositions
 
 @Composable
@@ -102,7 +107,7 @@ fun SearchSettingsScreen(
                 Scaffold(
                     contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
                 ) { innerPadding ->
-                    LazyColumn(contentPadding = innerPadding) {
+                    LazyColumn(contentPadding = innerPadding.plusVertical()) {
                         items(
                             items = visibleItems,
                             key = { (key, _, _) -> key },
@@ -160,8 +165,13 @@ fun <T: Any?> SearchScreen(
                 if (showSearch || searchText.text.isNotEmpty()) setShowSearch(false)
                 else onClickBack()
             }
+            // Plain `surface`, matching the page behind the list. The header used to be
+            // `surfaceContainer` — the same tone the grouped cards use — so a full-bleed block of
+            // card colour sat above a column of inset cards and read as one giant mismatched card.
+            // Only the cards are tinted now; the header just blends into the background, and lifts
+            // to `surfaceContainer` once content scrolls under it.
             Surface(
-                color = MaterialTheme.colorScheme.surfaceContainer,
+                color = MaterialTheme.colorScheme.surface,
             ) {
                 Column {
                     LargeTopAppBar(
@@ -169,7 +179,7 @@ fun <T: Any?> SearchScreen(
                         windowInsets = WindowInsets(0),
                         scrollBehavior = scrollBehavior,
                         colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                            containerColor = MaterialTheme.colorScheme.surface,
                             scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
                         ),
                         navigationIcon = {
@@ -211,8 +221,11 @@ fun <T: Any?> SearchScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 8.dp),
+                        // The header is `surface` now, so the field needs a tone above it to stay
+                        // visible — it used to be set to `surface` to sit on a tinted header.
                         colors = TextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surface
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                         )
                     )
                 }
@@ -230,7 +243,7 @@ fun <T: Any?> SearchScreen(
                     Scaffold(
                         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
                     ) { innerPadding ->
-                        LazyColumn(contentPadding = innerPadding) {
+                        LazyColumn(contentPadding = innerPadding.plusVertical()) {
                             items(items, key = { it ?: "__null_item__" }) {
                                 // Search results have no categories to group by, so each hit is its
                                 // own card.
@@ -244,6 +257,22 @@ fun <T: Any?> SearchScreen(
             }
         }
     }
+}
+
+/**
+ * Adds [PreferenceListVerticalPadding] above and below the window insets a Scaffold hands its
+ * content, so the first card clears the app bar and the last one clears the bottom edge. Added to
+ * the existing padding rather than replacing it, or the list would draw under the navigation bar.
+ */
+@Composable
+private fun PaddingValues.plusVertical(): PaddingValues {
+    val direction = LocalLayoutDirection.current
+    return PaddingValues(
+        start = calculateStartPadding(direction),
+        end = calculateEndPadding(direction),
+        top = calculateTopPadding() + PreferenceListVerticalPadding,
+        bottom = calculateBottomPadding() + PreferenceListVerticalPadding,
+    )
 }
 
 // from StreetComplete
