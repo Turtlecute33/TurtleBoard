@@ -7,7 +7,8 @@ import helium314.keyboard.latin.settings.Settings
 import helium314.keyboard.latin.voice.AiProvider
 import helium314.keyboard.latin.voice.OpenRouterClient
 import helium314.keyboard.latin.voice.SpeechEngine
-import helium314.keyboard.latin.voice.supportsOpenRouterSttSlug
+import helium314.keyboard.latin.voice.defaultSttModel
+import helium314.keyboard.latin.voice.supportsSttSlug
 import helium314.keyboard.latin.voice.supportsTextFixSlug
 import helium314.keyboard.latin.voice.supportsVoiceSlug
 import org.junit.runner.RunWith
@@ -153,10 +154,14 @@ class VoiceScreenLogicTest {
                 "Defaults.PREF_TEXT_FIX_MODEL must be a text-fix slug supported by $provider"
             )
         }
-        assertTrue(
-            supportsOpenRouterSttSlug(Defaults.PREF_VOICE_STT_MODEL),
-            "Defaults.PREF_VOICE_STT_MODEL must be an OpenRouter STT slug"
-        )
+        // The two transcription endpoints have separate namespaces, so each provider carries its
+        // own fallback rather than sharing Defaults.PREF_VOICE_STT_MODEL.
+        for (provider in AiProvider.values()) {
+            assertTrue(
+                provider.supportsSttSlug(provider.defaultSttModel()),
+                "$provider.defaultSttModel() must be an STT slug that provider offers"
+            )
+        }
     }
 
     @Test

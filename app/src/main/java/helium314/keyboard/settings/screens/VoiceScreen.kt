@@ -52,7 +52,8 @@ import helium314.keyboard.latin.voice.SecretStore
 import helium314.keyboard.latin.voice.apiKeyPrefKey
 import helium314.keyboard.latin.voice.defaultApiKey
 import helium314.keyboard.latin.voice.isValidCustomModelSlug
-import helium314.keyboard.latin.voice.supportsOpenRouterSttSlug
+import helium314.keyboard.latin.voice.defaultSttModel
+import helium314.keyboard.latin.voice.supportsSttSlug
 import helium314.keyboard.latin.voice.supportsTextFixSlug
 import helium314.keyboard.latin.voice.supportsVoiceSlug
 import helium314.keyboard.settings.SearchSettingsScreen
@@ -157,14 +158,17 @@ internal fun buildVoiceScreenItems(
         if (cloud && traditionalEnabled) Settings.PREF_VOICE_TRANSCRIPTION_PROMPT else null,
         if (cloud && traditionalEnabled) Settings.PREF_VOICE_TRANSCRIPTION_DICTIONARY else null,
         if (cloud && traditionalEnabled) Settings.PREF_VOICE_EXPECTED_LANGUAGES else null,
-        // Dedicated STT subsection — fully independent toggle and settings.
-        if (cloud && provider == AiProvider.OPENROUTER) R.string.voice_stt_category else null,
-        if (cloud && provider == AiProvider.OPENROUTER) Settings.PREF_VOICE_STT_ENABLED else null,
-        if (cloud && provider == AiProvider.OPENROUTER && sttEnabled) Settings.PREF_VOICE_STT_MODEL else null,
-        if (cloud && provider == AiProvider.OPENROUTER && sttEnabled && sttModel == "custom") Settings.PREF_VOICE_STT_MODEL_CUSTOM else null,
-        if (cloud && provider == AiProvider.OPENROUTER && sttEnabled) Settings.PREF_VOICE_STT_PROMPT else null,
-        if (cloud && provider == AiProvider.OPENROUTER && sttEnabled) Settings.PREF_VOICE_STT_DICTIONARY else null,
-        if (cloud && provider == AiProvider.OPENROUTER && sttEnabled) Settings.PREF_VOICE_STT_EXPECTED_LANGUAGES else null,
+        // Dedicated STT subsection — fully independent toggle and settings. Both providers run a
+        // transcription endpoint, and on both it is the faster of the two routes.
+        if (cloud) R.string.voice_stt_category else null,
+        if (cloud) Settings.PREF_VOICE_STT_ENABLED else null,
+        if (cloud && sttEnabled) Settings.PREF_VOICE_STT_MODEL else null,
+        // PayPerQ's transcription endpoint accepts the `model` field and ignores it, so a custom
+        // slug there would change nothing.
+        if (cloud && sttEnabled && sttModel == "custom" && provider == AiProvider.OPENROUTER) Settings.PREF_VOICE_STT_MODEL_CUSTOM else null,
+        if (cloud && sttEnabled) Settings.PREF_VOICE_STT_PROMPT else null,
+        if (cloud && sttEnabled) Settings.PREF_VOICE_STT_DICTIONARY else null,
+        if (cloud && sttEnabled) Settings.PREF_VOICE_STT_EXPECTED_LANGUAGES else null,
         // Auto-polish: a second LLM pass that cleans up the raw transcription. Applies to both the
         // chat-audio and dedicated-STT flows, hence its placement above the shared section.
         if (cloud) R.string.voice_polish_category else null,
@@ -301,8 +305,8 @@ fun createVoiceSettings(context: Context) = listOf(
                 if (!provider.supportsVoiceSlug(currentVoice)) {
                     putString(Settings.PREF_VOICE_MODEL, Defaults.PREF_VOICE_MODEL)
                 }
-                if (provider != AiProvider.OPENROUTER || !supportsOpenRouterSttSlug(currentStt)) {
-                    putString(Settings.PREF_VOICE_STT_MODEL, Defaults.PREF_VOICE_STT_MODEL)
+                if (!provider.supportsSttSlug(currentStt)) {
+                    putString(Settings.PREF_VOICE_STT_MODEL, provider.defaultSttModel())
                 }
                 if (!provider.supportsTextFixSlug(currentTextFix)) {
                     putString(Settings.PREF_TEXT_FIX_MODEL, Defaults.PREF_TEXT_FIX_MODEL)
@@ -337,13 +341,33 @@ fun createVoiceSettings(context: Context) = listOf(
             KeyboardSwitcher.getInstance().setThemeNeedsReload()
         }
     },
-    Setting(context, Settings.PREF_VOICE_STT_ENABLED, R.string.voice_stt_enabled, R.string.voice_stt_enabled_summary) {
-        SwitchPreference(it, Defaults.PREF_VOICE_STT_ENABLED) {
+    Setting(context, Settings.PREF_VOICE_STT_ENABLED, R.string.voice_stt_enabled, R.string.voice_stt_enabled_summary) { setting ->
+        val prefs = LocalContext.current.prefs()
+        val providerPref by rememberStringPreferenceState(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER)
+        SwitchPreference(setting, Defaults.PREF_VOICE_STT_ENABLED) { enabled ->
+            // The saved slug can belong to the other provider — the section is only reachable once
+            // the toggle is on, so a user who never switched provider has never had the chance to
+            // pick one. Point it at something this provider offers instead of opening the picker on
+            // a model it will report as unavailable.
+            if (enabled) {
+                val provider = AiProvider.fromPref(providerPref)
+                val current = prefs.getString(Settings.PREF_VOICE_STT_MODEL, Defaults.PREF_VOICE_STT_MODEL)
+                    ?: Defaults.PREF_VOICE_STT_MODEL
+                if (!provider.supportsSttSlug(current)) {
+                    prefs.edit { putString(Settings.PREF_VOICE_STT_MODEL, provider.defaultSttModel()) }
+                }
+            }
             KeyboardSwitcher.getInstance().setThemeNeedsReload()
         }
     },
     Setting(context, Settings.PREF_VOICE_STT_MODEL, R.string.voice_stt_model) { setting ->
-        ModelListPreference(setting, ModelCatalog.OPENROUTER_STT, Defaults.PREF_VOICE_STT_MODEL)
+        val providerPref by rememberStringPreferenceState(Settings.PREF_AI_PROVIDER, Defaults.PREF_AI_PROVIDER)
+        val provider = AiProvider.fromPref(providerPref)
+        val entries = when (provider) {
+            AiProvider.OPENROUTER -> ModelCatalog.OPENROUTER_STT
+            AiProvider.PAYPERQ -> ModelCatalog.PAYPERQ_STT
+        }
+        ModelListPreference(setting, entries, provider.defaultSttModel())
     },
     Setting(context, Settings.PREF_VOICE_STT_MODEL_CUSTOM, R.string.voice_stt_model_custom, R.string.voice_stt_model_custom_summary) {
         TextInputPreference(it, Defaults.PREF_VOICE_STT_MODEL_CUSTOM, checkTextValid = ::isValidCustomModelSlug)

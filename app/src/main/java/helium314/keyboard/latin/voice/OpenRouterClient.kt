@@ -69,7 +69,18 @@ class OpenRouterClient(
         const val DEFAULT_CONNECT_TIMEOUT_MS = 15_000
         const val DEFAULT_READ_TIMEOUT_MS = 90_000
         private const val MAX_ATTEMPTS = 3
-        private val RETRYABLE_STATUSES = setOf(408, 425, 429, 500, 502, 503, 504)
+        /**
+         * Sentinel status for "HTTP 200 with a body we cannot use" — a JSON body we can't parse, a
+         * `{"error": …}` envelope served with a 200 (PayPerQ does this when its upstream fails), no
+         * `choices`, or an assistant message whose content is empty because the model spent its
+         * whole completion on reasoning tokens. Observed on PayPerQ: rare, transient, and cleared by
+         * repeating the same request. It is retryable for that reason, but it is deliberately NOT a
+         * real HTTP status so nothing can collide with it.
+         */
+        const val STATUS_UNUSABLE_RESPONSE = -2
+        /** Sentinel for a transcription that came back empty because the clip held no speech. */
+        const val STATUS_NO_SPEECH = -3
+        private val RETRYABLE_STATUSES = setOf(408, 425, 429, 500, 502, 503, 504, STATUS_UNUSABLE_RESPONSE)
         // Sanity cap to prevent pathological responses from consuming unbounded memory.
         // Real transcription responses are kilobytes; 1 MB is ~3 orders of magnitude of headroom.
         private const val MAX_RESPONSE_BYTES = 1_000_000L
@@ -92,6 +103,9 @@ class OpenRouterClient(
                 }
         }
 
+        @VisibleForTesting
+        internal fun isRetryableStatus(statusCode: Int): Boolean = statusCode in RETRYABLE_STATUSES
+
         fun applyOpenRouterAttributionHeaders(connection: HttpURLConnection) {
             connection.setRequestProperty("HTTP-Referer", APP_REFERER)
             connection.setRequestProperty("X-OpenRouter-Title", APP_TITLE)
@@ -106,12 +120,17 @@ class OpenRouterClient(
      * or after retries are exhausted. The caller owns the file and must delete it.
      */
     fun transcribe(audioFile: File): String = withOptionalZdr("Transcription") { enforceZdr ->
-        if (provider == AiProvider.OPENROUTER && transcriptionMode == VoiceTranscriptionMode.OPENROUTER_STT) {
-            performOpenRouterSttTranscription(audioFile, enforceZdr)
-        } else if (provider == AiProvider.PAYPERQ && "/" !in model) {
-            performPayPerQTranscription(audioFile)
-        } else {
-            performRequest(audioFile, enforceZdr)
+        val dedicatedStt = transcriptionMode == VoiceTranscriptionMode.DEDICATED_STT
+        when {
+            provider == AiProvider.OPENROUTER && dedicatedStt ->
+                performOpenRouterSttTranscription(audioFile, enforceZdr)
+            // PayPerQ rejects a transcription model on chat/completions with a 400 that names the
+            // right endpoint, so the choice of endpoint has to follow the mode, not the shape of
+            // the slug. The legacy slash test stays as a safety net for a bare slug like `nova-3`
+            // saved before the mode existed.
+            provider == AiProvider.PAYPERQ && (dedicatedStt || "/" !in model) ->
+                performPayPerQTranscription(audioFile)
+            else -> performRequest(audioFile, enforceZdr)
         }
     }
 
@@ -279,14 +298,14 @@ class OpenRouterClient(
         val textContent = JSONObject().apply {
             put("type", "text")
             put("text", systemPrompt)
-            // Attach a prompt-cache breakpoint on the (stable) system prompt for every OpenRouter
-            // request. Providers that need an explicit breakpoint (Anthropic, legacy Gemini) get
-            // one; providers that cache implicitly (OpenAI, Gemini 2.5+, Grok, DeepSeek) ignore it
+            // Attach a prompt-cache breakpoint on the (stable) system prompt for every request.
+            // Providers that need an explicit breakpoint (Anthropic, legacy Gemini) get one;
+            // providers that cache implicitly (OpenAI, Gemini 2.5+, Grok, DeepSeek) ignore it
             // harmlessly. Caching only actually engages once the cached prefix clears the provider's
             // minimum-token floor (~1K for Gemini Flash), so short prompts still won't cache.
-            if (provider == AiProvider.OPENROUTER) {
-                put("cache_control", JSONObject().apply { put("type", "ephemeral") })
-            }
+            // PayPerQ accepts the breakpoint and reports cache hits back in
+            // `usage.prompt_tokens_details.cached_tokens`, so it is sent there too.
+            put("cache_control", JSONObject().apply { put("type", "ephemeral") })
         }
         return JSONObject().apply {
             put("role", "system")
@@ -431,7 +450,9 @@ class OpenRouterClient(
     }
 
     private fun performPayPerQTranscription(audioFile: File): String {
-        val boundary = "WisprBoard-${UUID.randomUUID()}"
+        // A neutral boundary: PayPerQ gets no attribution headers, so naming the app here would be
+        // the one thing in the request that identifies which client sent it.
+        val boundary = "----${UUID.randomUUID()}"
         val connection = (URL(PAYPERQ_TRANSCRIPTION_ENDPOINT).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             setRequestProperty("Authorization", "Bearer $apiKey")
@@ -501,20 +522,31 @@ class OpenRouterClient(
         val json = try {
             JSONObject(responseBody)
         } catch (e: JSONException) {
-            throw OpenRouterException("Malformed API response")
+            throw unusableResponse("Malformed API response")
         }
         logCacheUsage(json)
         val choices = json.optJSONArray("choices")
         if (choices == null || choices.length() == 0) {
-            throw OpenRouterException("API response missing choices")
+            // PayPerQ serves `{"error": {...}}` with a 200 when its upstream fails, so an absent
+            // `choices` is an upstream fault rather than a malformed reply. Either way it is the
+            // same transient, retryable condition.
+            throw unusableResponse("API response missing choices")
         }
         val message = choices.optJSONObject(0)?.optJSONObject("message")
         val content = extractMessageText(message)
         if (content.isEmpty()) {
-            throw OpenRouterException("API response missing content")
+            // Reasoning models sometimes answer with `content: null` and everything they produced
+            // in `reasoning` instead. Repeating the request clears it. We do not read `reasoning`
+            // as a substitute: the same model fills that field with its scratchpad ("First, the
+            // user has provided a system instruction…") just as often as with the finished answer,
+            // and typing a scratchpad into the user's text field is worse than one retry.
+            throw unusableResponse("API response missing content")
         }
         return content
     }
+
+    private fun unusableResponse(message: String) =
+        OpenRouterException(message, STATUS_UNUSABLE_RESPONSE)
 
     @VisibleForTesting
     internal fun extractMessageText(message: JSONObject?): String {
@@ -522,7 +554,10 @@ class OpenRouterClient(
         message.optJSONObject("audio")?.optString("transcript")?.trim()?.takeIf { it.isNotEmpty() }?.let {
             return it
         }
-        val rawContent = message.opt("content") ?: return ""
+        // `"content": null` arrives as JSONObject.NULL, which is not a Kotlin null. Left to the
+        // toString fallback below it stringifies to the word "null" — a reply that reads as a
+        // successful transcription and types "null" into the user's text field.
+        val rawContent = message.opt("content")?.takeIf { it != JSONObject.NULL } ?: return ""
         if (rawContent is String) return rawContent.trim()
         if (rawContent is JSONArray) {
             val parts = mutableListOf<String>()
@@ -538,15 +573,23 @@ class OpenRouterClient(
         return rawContent.toString().trim()
     }
 
-    private fun parseTranscriptionContent(responseBody: String): String {
+    @VisibleForTesting
+    internal fun parseTranscriptionContent(responseBody: String): String {
         val json = try {
             JSONObject(responseBody)
         } catch (e: JSONException) {
             return responseBody.trim().takeIf { it.isNotEmpty() }
-                ?: throw OpenRouterException("Malformed API response")
+                ?: throw unusableResponse("Malformed API response")
         }
-        val text = json.optString("text").trim()
-        if (text.isEmpty()) throw OpenRouterException("API response missing content")
+        // OpenRouter answers with `text`; PayPerQ mirrors the same value under `transcription`.
+        val text = json.optString("text").trim().takeIf { it.isNotEmpty() }
+            ?: json.optString("transcription").trim()
+        if (text.isEmpty()) {
+            // A transcription endpoint that returns an empty string heard no speech — silence, or
+            // a clip that is only background noise. That is a property of the recording, so
+            // re-uploading it would fail identically and only cost the user another request.
+            throw OpenRouterException("No speech detected", STATUS_NO_SPEECH)
+        }
         return text
     }
 

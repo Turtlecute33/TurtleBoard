@@ -1138,7 +1138,7 @@ New dictionary:
     <string name="voice_shared_category">Shared capture options</string>
     <string name="voice_stt_category">Dedicated speech-to-text endpoint</string>
     <string name="voice_stt_enabled">Add STT button to Return menu</string>
-    <string name="voice_stt_enabled_summary">Adds a separate long-press Return button that uses OpenRouter\'s audio transcription endpoint, independent of the traditional voice button.</string>
+    <string name="voice_stt_enabled_summary">Adds a separate long-press Return button that uses your provider\'s audio transcription endpoint, independent of the traditional voice button. It is usually much faster than sending audio to a chat model.</string>
     <string name="voice_stt_model">STT Model</string>
     <string name="voice_stt_model_custom">Custom STT Model ID</string>
     <string name="voice_stt_model_custom_summary">Only used when STT Model is set to Custom</string>

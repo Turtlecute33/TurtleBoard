@@ -39,6 +39,7 @@ internal const val MODEL_CUSTOM = "custom"
  */
 private val OPENROUTER_VOICE_SLUGS: Set<String> = ModelCatalog.OPENROUTER_VOICE.mapTo(LinkedHashSet()) { it.slug }
 private val OPENROUTER_STT_SLUGS: Set<String> = ModelCatalog.OPENROUTER_STT.mapTo(LinkedHashSet()) { it.slug }
+private val PAYPERQ_STT_SLUGS: Set<String> = ModelCatalog.PAYPERQ_STT.mapTo(LinkedHashSet()) { it.slug }
 private val PAYPERQ_VOICE_SLUGS: Set<String> = ModelCatalog.PAYPERQ_VOICE.mapTo(LinkedHashSet()) { it.slug }
 private val OPENROUTER_TEXT_FIX_SLUGS: Set<String> = ModelCatalog.OPENROUTER_TEXT_FIX.mapTo(LinkedHashSet()) { it.slug }
 private val PAYPERQ_TEXT_FIX_SLUGS: Set<String> = ModelCatalog.PAYPERQ_TEXT_FIX.mapTo(LinkedHashSet()) { it.slug }
@@ -51,9 +52,21 @@ internal fun AiProvider.supportsVoiceSlug(slug: String): Boolean {
     }
 }
 
-internal fun supportsOpenRouterSttSlug(slug: String): Boolean {
+internal fun AiProvider.supportsSttSlug(slug: String): Boolean {
     if (slug == MODEL_CUSTOM) return true
-    return slug in OPENROUTER_STT_SLUGS
+    return slug in when (this) {
+        AiProvider.OPENROUTER -> OPENROUTER_STT_SLUGS
+        AiProvider.PAYPERQ -> PAYPERQ_STT_SLUGS
+    }
+}
+
+/**
+ * The transcription model to fall back to when the saved one belongs to the other provider. The two
+ * dedicated endpoints do not share a namespace, so there is no single default that suits both.
+ */
+internal fun AiProvider.defaultSttModel(): String = when (this) {
+    AiProvider.OPENROUTER -> Defaults.PREF_VOICE_STT_MODEL
+    AiProvider.PAYPERQ -> ModelCatalog.PAYPERQ_STT.first().slug
 }
 
 internal fun AiProvider.supportsTextFixSlug(slug: String): Boolean {

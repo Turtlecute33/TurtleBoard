@@ -86,6 +86,9 @@ private val SENSITIVE_USER_FACING_PATTERNS: List<Pair<Regex, String>> = listOf(
 internal fun safeUserFacingError(context: Context, e: Throwable, @StringRes fallbackResId: Int): String {
     if (e is OpenRouterException) {
         if (e.statusCode == 429 || e.statusCode == 503) return context.getString(R.string.voice_error_rate_limited)
+        // An empty transcript describes the recording, not the service. Saying so keeps the user
+        // from re-recording to work around what reads like a provider outage.
+        if (e.statusCode == OpenRouterClient.STATUS_NO_SPEECH) return context.getString(R.string.voice_error_silent)
         val raw = e.message?.takeIf { it.isNotBlank() }
         if (raw != null) {
             return SENSITIVE_USER_FACING_PATTERNS.fold(raw) { acc, (regex, replacement) ->
@@ -129,7 +132,14 @@ internal data class ResolvedVoicePrompt(
 
 enum class VoiceTranscriptionMode {
     CHAT_AUDIO,
-    OPENROUTER_STT,
+
+    /**
+     * The provider's dedicated speech-to-text endpoint rather than chat completions. Both providers
+     * expose one, and both are markedly faster than routing audio through a chat model: measured
+     * against PayPerQ, a 30-second clip comes back in about 1.7 s this way versus 10–15 s through
+     * a chat model.
+     */
+    DEDICATED_STT,
 }
 
 /**

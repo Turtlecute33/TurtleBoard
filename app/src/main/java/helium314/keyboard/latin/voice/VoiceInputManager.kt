@@ -455,7 +455,7 @@ class VoiceInputManager(
             runtimeInstruction = prompt.runtimeInstruction,
             provider = provider,
             useZeroDataRetention = useZdr,
-            transcriptionMode = if (useDedicatedStt) VoiceTranscriptionMode.OPENROUTER_STT else VoiceTranscriptionMode.CHAT_AUDIO,
+            transcriptionMode = if (useDedicatedStt) VoiceTranscriptionMode.DEDICATED_STT else VoiceTranscriptionMode.CHAT_AUDIO,
             transcriptionLanguage = localeHint?.toOpenRouterSttLanguage(),
         )
         val requestToken = activeTranscriptionToken.incrementAndGet()
