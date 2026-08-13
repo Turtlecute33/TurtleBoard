@@ -630,6 +630,14 @@ private object AppUpgrade {
         if (oldVersion <= 6660 && prefs.getInt(Settings.PREF_CLIPBOARD_HISTORY_RETENTION_TIME, Defaults.PREF_CLIPBOARD_HISTORY_RETENTION_TIME) == 121) {
             prefs.edit { putInt(Settings.PREF_CLIPBOARD_HISTORY_RETENTION_TIME, Settings.CLIPBOARD_RETENTION_NO_LIMIT_MINUTES) }
         }
+        // 7.5.0 replaced the retention slider with a list of presets, and uses a new "unlimited" value.
+        // Snap whatever the slider stored to the closest preset, so the setting always shows a label.
+        if (oldVersion <= 7400) {
+            val stored = prefs.getInt(Settings.PREF_CLIPBOARD_HISTORY_RETENTION_TIME, Defaults.PREF_CLIPBOARD_HISTORY_RETENTION_TIME)
+            val retention = if (Settings.isClipboardRetentionUnlimited(stored.toLong())) Settings.CLIPBOARD_RETENTION_UNLIMITED
+                else Settings.CLIPBOARD_RETENTION_PRESETS.minBy { kotlin.math.abs(it - stored) }
+            prefs.edit { putInt(Settings.PREF_CLIPBOARD_HISTORY_RETENTION_TIME, retention) }
+        }
         upgradeToolbarPrefs(prefs)
         LayoutUtilsCustom.onLayoutFileChanged() // just to be sure
         prefs.edit { putInt(Settings.PREF_VERSION_CODE, BuildConfig.VERSION_CODE) }

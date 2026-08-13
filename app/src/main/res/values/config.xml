@@ -78,7 +78,7 @@
     <integer name="config_emoji_keyboard_max_recents_key_count">32</integer>
 
     <!-- Clipboard keyboard -->
-    <integer name="config_clipboard_keyboard_col_count">2</integer>
+    <integer name="config_clipboard_keyboard_col_count">1</integer>
 
     <!-- Key codes of hardware keys that can be used to toggle the Emoji layout.
          Each array defines a comma-separated tuple containing:

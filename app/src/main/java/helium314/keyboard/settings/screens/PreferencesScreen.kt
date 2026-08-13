@@ -184,16 +184,11 @@ fun createPreferencesSettings(context: Context) = listOf(
     },
     Setting(context, Settings.PREF_CLIPBOARD_HISTORY_RETENTION_TIME, R.string.clipboard_history_retention_time) { setting ->
         val ctx = LocalContext.current
-        SliderPreference(
-            name = setting.title,
-            key = setting.key,
-            default = Defaults.PREF_CLIPBOARD_HISTORY_RETENTION_TIME,
-            description = {
-                if (it >= Settings.CLIPBOARD_RETENTION_NO_LIMIT_MINUTES) stringResource(R.string.settings_no_limit)
-                else stringResource(R.string.abbreviation_unit_minutes, it.toString())
-            },
-            range = 1f..Settings.CLIPBOARD_RETENTION_NO_LIMIT_MINUTES.toFloat(),
-        ) { ClipboardDao.getInstance(ctx)?.clearOldClips(true) }
+        val items = Settings.CLIPBOARD_RETENTION_PRESETS.map { retentionLabel(it) to it } +
+                (stringResource(R.string.settings_no_limit) to Settings.CLIPBOARD_RETENTION_UNLIMITED)
+        ListPreference(setting, items, Defaults.PREF_CLIPBOARD_HISTORY_RETENTION_TIME) {
+            ClipboardDao.getInstance(ctx)?.clearOldClips(true)
+        }
     },
     Setting(context, Settings.PREF_CLIPBOARD_HISTORY_PINNED_FIRST, R.string.clipboard_history_pinned_first) {
         SwitchPreference(it, Defaults.PREF_CLIPBOARD_HISTORY_PINNED_FIRST)
@@ -253,6 +248,13 @@ fun createPreferencesSettings(context: Context) = listOf(
 
 // todo (later): not good to have it hardcoded, but reading a bunch of files may be noticeably slow
 private val localesWithLocalizedNumberRow = listOf("ar", "bn", "fa", "gu", "hi", "kn", "mr", "ne", "ur")
+
+@Composable
+private fun retentionLabel(minutes: Int) = when {
+    minutes < 60 -> stringResource(R.string.abbreviation_unit_minutes, minutes.toString())
+    minutes < 24 * 60 -> stringResource(R.string.abbreviation_unit_hours, (minutes / 60).toString())
+    else -> stringResource(R.string.abbreviation_unit_days, (minutes / (24 * 60)).toString())
+}
 
 @Preview
 @Composable

@@ -2,6 +2,7 @@
 
 package helium314.keyboard.latin
 
+import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.text.InputType
@@ -75,11 +76,18 @@ class ClipboardHistoryManager(
         removeClipboardSuggestion()
     }
 
-    fun canRemove(index: Int) = clipboardDao?.isPinned(index) == false
+    fun removeEntry(id: Long) {
+        clipboardDao?.deleteClip(id)
+    }
 
-    fun removeEntry(index: Int) {
-        if (canRemove(index))
-            clipboardDao?.deleteClipAt(index)
+    fun updateEntryText(id: Long, text: String) {
+        if (text.isEmpty()) clipboardDao?.deleteClip(id)
+        else clipboardDao?.updateText(id, text)
+    }
+
+    /** Puts [text] back into the system clipboard, so other apps can paste it */
+    fun copyToSystemClipboard(text: String) {
+        clipboardManager.setPrimaryClip(ClipData.newPlainText(null, text))
     }
 
     fun sortHistoryEntries() {
@@ -92,7 +100,8 @@ class ClipboardHistoryManager(
 
     fun getHistorySize() = clipboardDao?.count() ?: 0
 
-    fun getHistoryEntry(position: Int) = clipboardDao?.getAt(position)
+    /** Snapshot of the whole history, most recent (or pinned) first */
+    fun getHistoryEntries(): List<ClipboardHistoryEntry> = clipboardDao?.getAll().orEmpty()
 
     fun getHistoryEntryContent(id: Long) = clipboardDao?.get(id)
 

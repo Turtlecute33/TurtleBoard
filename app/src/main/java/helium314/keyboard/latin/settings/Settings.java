@@ -198,9 +198,18 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
 
     public static final String PREF_ENABLE_CLIPBOARD_HISTORY = "enable_clipboard_history";
     public static final String PREF_CLIPBOARD_HISTORY_RETENTION_TIME = "clipboard_history_retention_time";
-    // Sentinel meaning "keep clips forever"; one above the largest selectable retention (24 h).
-    // Stored in prefs, so changing it requires a remapping step in AppUpgrade.
+    // Legacy sentinel meaning "keep clips forever", written by the old retention slider (1..1441 minutes).
+    // Stored in prefs, so it stays valid; new values use CLIPBOARD_RETENTION_UNLIMITED.
     public static final int CLIPBOARD_RETENTION_NO_LIMIT_MINUTES = 1441;
+    /** Retention value meaning "keep clips forever" */
+    public static final int CLIPBOARD_RETENTION_UNLIMITED = -1;
+    /** Selectable retention times, in minutes */
+    public static final int[] CLIPBOARD_RETENTION_PRESETS =
+            { 1, 5, 10, 30, 60, 360, 720, 1440, 4320, 10080, 43200 };
+
+    public static boolean isClipboardRetentionUnlimited(final long retentionMinutes) {
+        return retentionMinutes <= 0 || retentionMinutes == CLIPBOARD_RETENTION_NO_LIMIT_MINUTES;
+    }
     public static final String PREF_CLIPBOARD_HISTORY_PINNED_FIRST = "clipboard_history_pinned_first";
 
     public static final String PREF_ADD_TO_PERSONAL_DICTIONARY = "add_to_personal_dictionary";

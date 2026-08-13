@@ -92,6 +92,10 @@
     <string name="abbreviation_unit_milliseconds">%s ms</string>
     <!-- Units abbreviation for the duration (minutes) -->
     <string name="abbreviation_unit_minutes">%s min</string>
+    <!-- Units abbreviation for the duration (hours) -->
+    <string name="abbreviation_unit_hours">%s h</string>
+    <!-- Units abbreviation for the duration (days) -->
+    <string name="abbreviation_unit_days">%s d</string>
     <!-- The text that represents the current settings value is the system default -->
     <string name="settings_system_default">System default</string>
     <!-- The text that represents an unlimited delay -->
@@ -212,6 +216,58 @@
     <string name="clipboard_history_retention_time">History retention time</string>
     <!-- Preferences item for showing pinned clipboard items first -->
     <string name="clipboard_history_pinned_first">Show pinned items on top</string>
+
+    <!-- Clipboard panel: hint in the search field -->
+    <string name="clipboard_search">Search clips</string>
+    <!-- Clipboard panel: button that removes all clips that are not pinned -->
+    <string name="clipboard_clear_all">Clear history</string>
+    <!-- Clipboard panel: button that opens the actions of a clip -->
+    <string name="clipboard_actions">Clip actions</string>
+    <!-- Clipboard panel: button that shows the full text of a clip -->
+    <string name="clipboard_show_more">Show more</string>
+    <!-- Clipboard panel: button that shows the short text of a clip again -->
+    <string name="clipboard_show_less">Show less</string>
+    <!-- Clipboard panel: title when there is no clip -->
+    <string name="clipboard_empty_title">No clips yet</string>
+    <!-- Clipboard panel: text below the title when there is no clip -->
+    <string name="clipboard_empty_summary">Text that you copy shows here</string>
+    <!-- Clipboard panel: text when a filter matches no clip -->
+    <string name="clipboard_empty_filtered">No clips of this type</string>
+    <!-- Clipboard panel: text when the search matches no clip -->
+    <string name="clipboard_no_matches">No matches</string>
+    <!-- Clipboard panel: hint in the field that edits the text of a clip -->
+    <string name="clipboard_edit_hint">Clip text</string>
+    <!-- Clipboard panel: action that puts the clip into the text field -->
+    <string name="clipboard_action_paste">Paste</string>
+    <!-- Clipboard panel: action that keeps a clip until the user unpins it -->
+    <string name="clipboard_action_pin">Pin</string>
+    <!-- Clipboard panel: action that releases a pinned clip -->
+    <string name="clipboard_action_unpin">Unpin</string>
+    <!-- Clipboard panel: action that changes the text of a clip -->
+    <string name="clipboard_action_edit">Edit</string>
+    <!-- Clipboard panel: action that puts the clip into the system clipboard -->
+    <string name="clipboard_action_copy">Copy</string>
+    <!-- Clipboard panel: action that sends the clip to another app -->
+    <string name="clipboard_action_share">Share</string>
+    <!-- Clipboard panel: action that removes a clip -->
+    <string name="clipboard_action_delete">Delete</string>
+    <!-- Clipboard panel: filter that shows all clips -->
+    <string name="clipboard_filter_all">All</string>
+    <!-- Clipboard panel: filter that shows pinned clips -->
+    <string name="clipboard_filter_pinned">Pinned</string>
+    <!-- Clipboard panel: filter that shows clips with a web address -->
+    <string name="clipboard_filter_links">Links</string>
+    <!-- Clipboard panel: filter that shows clips with an email address -->
+    <string name="clipboard_filter_emails">Emails</string>
+    <!-- Clipboard panel: filter that shows clips with numbers -->
+    <string name="clipboard_filter_numbers">Numbers</string>
+    <!-- Clipboard panel: filter that shows clips with text -->
+    <string name="clipboard_filter_text">Text</string>
+    <!-- Clipboard panel: length of a long clip -->
+    <plurals name="clipboard_characters">
+        <item quantity="one">%d character</item>
+        <item quantity="other">%d characters</item>
+    </plurals>
     <!-- Preferences item for enabling swipe deletion -->
     <string name="delete_swipe">Delete swipe</string>
     <!-- Description for "delete_swipe" option. -->
@@ -825,7 +881,7 @@ New dictionary:
 \n► Hold shift or symbol key, press one or more keys, and then release shift or symbol key to return to the previous keyboard. &lt;br&gt; &lt;br&gt;
 \n► Long-press a suggestion in the suggestion strip to show more suggestions, and a delete button to remove this suggestion. &lt;br&gt; &lt;br&gt;
 \n► Swipe up from a suggestion to open more suggestions, and release on the suggestion to select it. &lt;br&gt; &lt;br&gt;
-\n► Long-press an entry in the clipboard history to pin it (keep it in clipboard until you unpin). &lt;br&gt; &lt;br&gt;
+\n► Long-press an entry in the clipboard history to show its actions: paste, pin, edit, copy, share and delete. &lt;br&gt; &lt;br&gt;
 \n► Swipe left in clipboard view to remove an entry (except when it\\\'s pinned) &lt;br&gt; &lt;br&gt;
 \n► Select text and press shift to switch between uppercase, lowercase and capitalize words. &lt;br&gt; &lt;br&gt;
 \n► You can add dictionaries by opening them in a file explorer: &lt;br&gt;
