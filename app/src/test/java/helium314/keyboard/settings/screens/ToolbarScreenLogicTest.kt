@@ -23,7 +23,9 @@ class ToolbarScreenLogicTest {
 
         assertTrue(Settings.PREF_TOOLBAR_HIDING_GLOBAL in hiddenToolbarItems)
         assertFalse(Settings.PREF_TOOLBAR_KEYS in hiddenToolbarItems)
-        assertTrue(Settings.PREF_CLIPBOARD_TOOLBAR_KEYS in hiddenToolbarItems)
+        // the clipboard panel has no toolbar strip, so its key list is not offered any more
+        assertFalse(Settings.PREF_CLIPBOARD_TOOLBAR_KEYS in hiddenToolbarItems)
+        assertTrue(Settings.PREF_TOOLBAR_CUSTOM_KEY_CODES in hiddenToolbarItems)
         assertFalse(R.string.settings_category_miscellaneous in hiddenToolbarItems)
         assertFalse(Settings.PREF_VOICE_INPUT_ENABLED in hiddenToolbarItems)
     }

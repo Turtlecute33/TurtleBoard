@@ -65,7 +65,8 @@ internal fun buildToolbarScreenItems(
     toolbarMode: ToolbarMode,
     toolbarHidingGlobal: Boolean,
 ): List<Any?> {
-    val clipboardToolbarVisible = toolbarMode != ToolbarMode.HIDDEN || !toolbarHidingGlobal
+    // the clipboard panel has no toolbar strip any more, so only the emoji strip is left here
+    val secondaryToolbarVisible = toolbarMode != ToolbarMode.HIDDEN || !toolbarHidingGlobal
     return listOf(
         Settings.PREF_TOOLBAR_MODE,
         if (toolbarMode == ToolbarMode.HIDDEN) Settings.PREF_TOOLBAR_HIDING_GLOBAL else null,
@@ -74,8 +75,7 @@ internal fun buildToolbarScreenItems(
             Settings.PREF_TOOLBAR_KEYS else null,
         if (toolbarMode == ToolbarMode.EXPANDABLE || toolbarMode == ToolbarMode.SUGGESTION_STRIP)
             Settings.PREF_PINNED_TOOLBAR_KEYS else null,
-        if (clipboardToolbarVisible) Settings.PREF_CLIPBOARD_TOOLBAR_KEYS else null,
-        if (clipboardToolbarVisible) Settings.PREF_TOOLBAR_CUSTOM_KEY_CODES else null,
+        if (secondaryToolbarVisible) Settings.PREF_TOOLBAR_CUSTOM_KEY_CODES else null,
         if (toolbarMode == ToolbarMode.EXPANDABLE) Settings.PREF_QUICK_PIN_TOOLBAR_KEYS else null,
         if (toolbarMode == ToolbarMode.EXPANDABLE) Settings.PREF_AUTO_SHOW_TOOLBAR else null,
         if (toolbarMode == ToolbarMode.EXPANDABLE) Settings.PREF_AUTO_HIDE_TOOLBAR else null,
@@ -109,9 +109,6 @@ fun createToolbarSettings(context: Context) = listOf(
     },
     Setting(context, Settings.PREF_PINNED_TOOLBAR_KEYS, R.string.pinned_toolbar_keys) {
         ReorderSwitchPreference(it, Defaults.PREF_PINNED_TOOLBAR_KEYS)
-    },
-    Setting(context, Settings.PREF_CLIPBOARD_TOOLBAR_KEYS, R.string.clipboard_toolbar_keys) {
-        ReorderSwitchPreference(it, Defaults.PREF_CLIPBOARD_TOOLBAR_KEYS)
     },
     Setting(context, Settings.PREF_TOOLBAR_CUSTOM_KEY_CODES, R.string.customize_toolbar_key_codes) {
         var showDialog by rememberSaveable { mutableStateOf(false) }

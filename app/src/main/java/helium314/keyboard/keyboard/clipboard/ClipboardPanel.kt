@@ -53,6 +53,7 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -90,14 +91,18 @@ private val ICON_TEXT = R.drawable.ic_text_lines
 @Composable
 fun ClipboardPanel(state: ClipboardPanelState, actions: ClipboardPanelActions, modifier: Modifier = Modifier) {
     ClipboardPanelTheme {
-        Box(modifier.fillMaxSize()) {
-            when (val mode = state.typingMode) {
-                is TypingMode.Search -> SearchLayer(state, actions)
-                is TypingMode.Edit -> EditLayer(state, actions, mode.id)
-                null -> BrowseLayer(state, actions)
+        // The panel draws on the keyboard background instead of a Surface, so nothing sets
+        // LocalContentColor and Material falls back to black: untinted icons were invisible on a
+        // dark theme. onSurface is the key text color of the active keyboard theme.
+        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
+            Box(modifier.fillMaxSize()) {
+                when (val mode = state.typingMode) {
+                    is TypingMode.Search -> SearchLayer(state, actions)
+                    is TypingMode.Edit -> EditLayer(state, actions, mode.id)
+                    null -> BrowseLayer(state, actions)
+                }
+                ClipActionSheet(state, actions)
             }
-            ClipActionSheet(state, actions)
-
         }
     }
 }

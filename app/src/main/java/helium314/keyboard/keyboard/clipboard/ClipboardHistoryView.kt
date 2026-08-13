@@ -8,9 +8,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.text.InputType
 import android.util.AttributeSet
-import android.view.View
 import android.view.inputmethod.EditorInfo
-import android.widget.ImageButton
 import android.widget.LinearLayout
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.content.withStyledAttributes
@@ -28,36 +26,32 @@ import helium314.keyboard.latin.AudioAndHapticFeedbackManager
 import helium314.keyboard.latin.ClipboardHistoryManager
 import helium314.keyboard.latin.R
 import helium314.keyboard.latin.RichInputMethodManager
-import helium314.keyboard.latin.common.ColorType
 import helium314.keyboard.latin.common.Constants
 import helium314.keyboard.latin.database.ClipboardDao
 import helium314.keyboard.latin.settings.Settings
 import helium314.keyboard.latin.utils.ImeComposeHost
 import helium314.keyboard.latin.utils.Log
 import helium314.keyboard.latin.utils.ResourceUtils
-import helium314.keyboard.latin.utils.ToolbarKey
-import helium314.keyboard.latin.utils.createToolbarKey
-import helium314.keyboard.latin.utils.getCodeForToolbarKey
-import helium314.keyboard.latin.utils.getCodeForToolbarKeyLongClick
-import helium314.keyboard.latin.utils.getEnabledClipboardToolbarKeys
-import helium314.keyboard.latin.utils.prefs
-import helium314.keyboard.latin.utils.setToolbarButtonsActivatedStateOnPrefChange
 
 /**
- * The clipboard panel: a Compose (Material 3) list of clips on top of a keyboard row.
- * The bottom row is the usual clipboard row, and turns into a full alphabet keyboard while
- * searching or editing a clip, as the IME cannot type into a text field of its own window.
+ * The clipboard panel: a Compose (Material 3) list of clips, filling the whole keyboard area.
+ *
+ * Nothing else is shown around it. The toolbar strip is hidden while the panel is up (see
+ * [helium314.keyboard.keyboard.KeyboardSwitcher.setClipboardKeyboard]) and the panel is measured a
+ * row taller to take that space, and the keyboard below the list only appears while searching or
+ * editing a clip, as the IME cannot type into a text field of its own window. Everything the strip
+ * and the bottom row used to offer — search, clear all, closing the panel — is in the panel's own
+ * top bar.
  */
 @SuppressLint("CustomViewStyleable")
 class ClipboardHistoryView @JvmOverloads constructor(
         context: Context,
         attrs: AttributeSet?,
         defStyle: Int = R.attr.clipboardHistoryViewStyle
-) : LinearLayout(context, attrs, defStyle), View.OnClickListener, View.OnLongClickListener,
+) : LinearLayout(context, attrs, defStyle),
     ClipboardDao.Listener, ClipboardPanelActions,
     SharedPreferences.OnSharedPreferenceChangeListener {
 
-    private val toolbarKeys = mutableListOf<ImageButton>()
     private val panelState = ClipboardPanelState()
 
     private lateinit var composeView: ComposeView
@@ -65,7 +59,6 @@ class ClipboardHistoryView @JvmOverloads constructor(
 
     lateinit var keyboardActionListener: KeyboardActionListener
     private var clipboardHistoryManager: ClipboardHistoryManager? = null
-    private var editorInfo: EditorInfo? = null
     private var typingElementId = KeyboardId.ELEMENT_ALPHABET
     private var oneShotShift = false
 
@@ -74,16 +67,12 @@ class ClipboardHistoryView @JvmOverloads constructor(
             panelState.pinIconRes = getResourceId(
                 R.styleable.ClipboardHistoryView_iconPinnedClip, R.drawable.ic_clipboard_pin_lxx)
         }
-        if (Settings.getValues().mSecondaryStripVisible) {
-            getEnabledClipboardToolbarKeys(context.prefs())
-                .forEach { toolbarKeys.add(createToolbarKey(context, it)) }
-        }
         fitsSystemWindows = true
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val width = ResourceUtils.getKeyboardWidth(context, Settings.getValues()) + paddingLeft + paddingRight
-        val height = ResourceUtils.getSecondaryKeyboardHeight(context.resources, Settings.getValues()) + paddingTop + paddingBottom
+        val height = panelHeight() + paddingTop + paddingBottom
         // measure with the final size, so the panel gets exactly the space that the bottom keyboard leaves
         super.onMeasure(
             MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
@@ -92,35 +81,25 @@ class ClipboardHistoryView @JvmOverloads constructor(
         setMeasuredDimension(width, height)
     }
 
-    private fun initialize() { // needs to be delayed for access to ClipboardStrip, which is not a child of this view
+    /**
+     * Height of the whole panel: the usual secondary keyboard height, plus the toolbar strip row
+     * that is hidden for the panel, so the window stays exactly as tall as the main keyboard and
+     * the clip list gets that row instead.
+     */
+    private fun panelHeight(): Int {
+        val sv = Settings.getValues()
+        val height = ResourceUtils.getSecondaryKeyboardHeight(context.resources, sv)
+        if (!sv.mSecondaryStripVisible) return height // no strip row to take over
+        return height + context.resources.getDimensionPixelSize(R.dimen.config_suggestions_strip_height)
+    }
+
+    private fun initialize() { // needs to be delayed until the children are inflated
         if (this::composeView.isInitialized) return
         ImeComposeHost.attachTo(this)
         bottomRowKeyboardView = findViewById(R.id.bottom_row_keyboard)
         composeView = findViewById<ComposeView>(R.id.clipboard_panel).apply {
             setContent { ClipboardPanel(panelState, this@ClipboardHistoryView) }
         }
-        val colors = Settings.getValues().mColors
-        val clipboardStrip = KeyboardSwitcher.getInstance().clipboardStrip
-        toolbarKeys.forEach {
-            clipboardStrip.addView(it)
-            it.setOnClickListener(this@ClipboardHistoryView)
-            it.setOnLongClickListener(this@ClipboardHistoryView)
-            colors.setColor(it, ColorType.TOOL_BAR_KEY)
-            colors.setBackground(it, ColorType.STRIP_BACKGROUND)
-        }
-    }
-
-    private fun setupToolbarKeys() {
-        val toolbarKeyLayoutParams = LayoutParams(
-            resources.getDimensionPixelSize(R.dimen.config_suggestions_strip_edge_key_width), LayoutParams.MATCH_PARENT)
-        toolbarKeys.forEach { it.layoutParams = toolbarKeyLayoutParams }
-    }
-
-    private fun setupBottomRowKeyboard(editorInfo: EditorInfo, listener: KeyboardActionListener) {
-        bottomRowKeyboardView.setKeyboardActionListener(listener)
-        PointerTracker.switchTo(bottomRowKeyboardView)
-        val kls = KeyboardLayoutSet.Builder.buildEmojiClipBottomRow(context, editorInfo)
-        bottomRowKeyboardView.setKeyboard(kls.getKeyboard(KeyboardId.ELEMENT_CLIPBOARD_BOTTOM_ROW))
     }
 
     fun setHardwareAcceleratedDrawingEnabled(enabled: Boolean) {
@@ -135,9 +114,7 @@ class ClipboardHistoryView @JvmOverloads constructor(
             keyboardActionListener: KeyboardActionListener
     ) {
         clipboardHistoryManager = historyManager
-        this.editorInfo = editorInfo
         initialize()
-        setupToolbarKeys()
         historyManager.prepareClipboardHistory()
         historyManager.setHistoryChangeListener(this)
 
@@ -147,10 +124,8 @@ class ClipboardHistoryView @JvmOverloads constructor(
         panelState.buffer.clear()
         refreshClips()
 
-        setupBottomRowKeyboard(editorInfo, keyboardActionListener)
-
-        // absurd workaround so Android sets the correct color from stateList (depending on "activated")
-        toolbarKeys.forEach { it.isEnabled = false; it.isEnabled = true }
+        // browsing needs no keys at all: the list gets the whole panel until typing starts
+        bottomRowKeyboardView.visibility = GONE
     }
 
     fun stopClipboardHistory() {
@@ -159,6 +134,7 @@ class ClipboardHistoryView @JvmOverloads constructor(
         panelState.typingMode = null
         panelState.buffer.clear()
         panelState.menuFor = null
+        bottomRowKeyboardView.visibility = GONE
         clipboardHistoryManager?.setHistoryChangeListener(null)
         clipboardHistoryManager = null
     }
@@ -170,35 +146,6 @@ class ClipboardHistoryView @JvmOverloads constructor(
     override fun onClipboardHistoryChanged() {
         refreshClips()
     }
-
-    // region toolbar strip
-
-    override fun onClick(view: View) {
-        val tag = view.tag
-        if (tag is ToolbarKey) {
-            AudioAndHapticFeedbackManager.getInstance()
-                .performHapticAndAudioFeedback(KeyCode.NOT_SPECIFIED, this, HapticEvent.KEY_PRESS)
-            val code = getCodeForToolbarKey(tag)
-            if (code != KeyCode.UNSPECIFIED) {
-                keyboardActionListener.onCodeInput(code, Constants.NOT_A_COORDINATE, Constants.NOT_A_COORDINATE, false)
-            }
-        }
-    }
-
-    override fun onLongClick(view: View): Boolean {
-        val tag = view.tag
-        if (tag is ToolbarKey) {
-            val longClickCode = getCodeForToolbarKeyLongClick(tag)
-            if (longClickCode != KeyCode.UNSPECIFIED) {
-                keyboardActionListener.onCodeInput(
-                    longClickCode, Constants.NOT_A_COORDINATE, Constants.NOT_A_COORDINATE, false)
-            }
-            return true
-        }
-        return false
-    }
-
-    // endregion
 
     // region panel actions
 
@@ -289,15 +236,16 @@ class ClipboardHistoryView @JvmOverloads constructor(
         panelState.typingMode = null
         panelState.buffer.clear()
         refreshClips()
-        editorInfo?.let { setupBottomRowKeyboard(it, keyboardActionListener) }
+        bottomRowKeyboardView.visibility = GONE
     }
 
-    /** Replaces the clipboard bottom row with a full keyboard, typing into the panel instead of the app */
+    /** Shows a full keyboard below the panel, typing into the panel instead of the app */
     private fun showTypingKeyboard(): Boolean {
         val keyboard = buildTypingKeyboard(typingElementId) ?: return false
         bottomRowKeyboardView.setKeyboardActionListener(typingActionListener)
         PointerTracker.switchTo(bottomRowKeyboardView)
         bottomRowKeyboardView.setKeyboard(keyboard)
+        bottomRowKeyboardView.visibility = VISIBLE
         return true
     }
 
@@ -305,7 +253,7 @@ class ClipboardHistoryView @JvmOverloads constructor(
         val sv = Settings.getValues()
         val res = context.resources
         val width = ResourceUtils.getKeyboardWidth(context, sv)
-        val panelHeight = ResourceUtils.getSecondaryKeyboardHeight(res, sv)
+        val panelHeight = panelHeight()
         val panelReserved = res.getDimensionPixelSize(R.dimen.config_clipboard_typing_area_height)
         val height = (panelHeight - panelReserved).coerceAtLeast((panelHeight * 0.55f).toInt())
         // always a text keyboard, even in number or phone fields, as we type into the panel
@@ -391,8 +339,6 @@ class ClipboardHistoryView @JvmOverloads constructor(
     // endregion
 
     override fun onSharedPreferenceChanged(prefs: SharedPreferences?, key: String?) {
-        setToolbarButtonsActivatedStateOnPrefChange(KeyboardSwitcher.getInstance().clipboardStrip, key)
-
         // The setting can only be changed from a settings screen, but adding it to this listener seems necessary:
         // https://github.com/HeliBorg/HeliBoard/pull/1903#issuecomment-3478424606
         if (clipboardHistoryManager != null && key == Settings.PREF_CLIPBOARD_HISTORY_PINNED_FIRST) {
