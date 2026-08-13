@@ -14,14 +14,6 @@ import android.widget.ImageButton
 import android.widget.LinearLayout
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.content.withStyledAttributes
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.LifecycleRegistry
-import androidx.lifecycle.setViewTreeLifecycleOwner
-import androidx.savedstate.SavedStateRegistry
-import androidx.savedstate.SavedStateRegistryController
-import androidx.savedstate.SavedStateRegistryOwner
-import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import helium314.keyboard.event.HapticEvent
 import helium314.keyboard.keyboard.Keyboard
 import helium314.keyboard.keyboard.KeyboardActionListener
@@ -40,6 +32,7 @@ import helium314.keyboard.latin.common.ColorType
 import helium314.keyboard.latin.common.Constants
 import helium314.keyboard.latin.database.ClipboardDao
 import helium314.keyboard.latin.settings.Settings
+import helium314.keyboard.latin.utils.ImeComposeHost
 import helium314.keyboard.latin.utils.Log
 import helium314.keyboard.latin.utils.ResourceUtils
 import helium314.keyboard.latin.utils.ToolbarKey
@@ -61,13 +54,11 @@ class ClipboardHistoryView @JvmOverloads constructor(
         attrs: AttributeSet?,
         defStyle: Int = R.attr.clipboardHistoryViewStyle
 ) : LinearLayout(context, attrs, defStyle), View.OnClickListener, View.OnLongClickListener,
-    ClipboardDao.Listener, ClipboardPanelActions, LifecycleOwner, SavedStateRegistryOwner,
+    ClipboardDao.Listener, ClipboardPanelActions,
     SharedPreferences.OnSharedPreferenceChangeListener {
 
     private val toolbarKeys = mutableListOf<ImageButton>()
     private val panelState = ClipboardPanelState()
-    private val lifecycleRegistry = LifecycleRegistry(this)
-    private val savedStateRegistryController = SavedStateRegistryController.create(this)
 
     private lateinit var composeView: ComposeView
     private lateinit var bottomRowKeyboardView: MainKeyboardView
@@ -77,9 +68,6 @@ class ClipboardHistoryView @JvmOverloads constructor(
     private var editorInfo: EditorInfo? = null
     private var typingElementId = KeyboardId.ELEMENT_ALPHABET
     private var oneShotShift = false
-
-    override val lifecycle: Lifecycle get() = lifecycleRegistry
-    override val savedStateRegistry: SavedStateRegistry get() = savedStateRegistryController.savedStateRegistry
 
     init {
         context.withStyledAttributes(attrs, R.styleable.ClipboardHistoryView, defStyle, R.style.ClipboardHistoryView) {
@@ -91,8 +79,6 @@ class ClipboardHistoryView @JvmOverloads constructor(
                 .forEach { toolbarKeys.add(createToolbarKey(context, it)) }
         }
         fitsSystemWindows = true
-        savedStateRegistryController.performRestore(null)
-        lifecycleRegistry.currentState = Lifecycle.State.CREATED
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -106,20 +92,9 @@ class ClipboardHistoryView @JvmOverloads constructor(
         setMeasuredDimension(width, height)
     }
 
-    override fun onAttachedToWindow() {
-        super.onAttachedToWindow()
-        lifecycleRegistry.currentState = Lifecycle.State.RESUMED
-    }
-
-    override fun onDetachedFromWindow() {
-        lifecycleRegistry.currentState = Lifecycle.State.CREATED
-        super.onDetachedFromWindow()
-    }
-
     private fun initialize() { // needs to be delayed for access to ClipboardStrip, which is not a child of this view
         if (this::composeView.isInitialized) return
-        setViewTreeLifecycleOwner(this)
-        setViewTreeSavedStateRegistryOwner(this)
+        ImeComposeHost.attachTo(this)
         bottomRowKeyboardView = findViewById(R.id.bottom_row_keyboard)
         composeView = findViewById<ComposeView>(R.id.clipboard_panel).apply {
             setContent { ClipboardPanel(panelState, this@ClipboardHistoryView) }
