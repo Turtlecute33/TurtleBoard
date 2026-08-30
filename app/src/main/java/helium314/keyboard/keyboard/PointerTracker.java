@@ -87,7 +87,10 @@ public final class PointerTracker implements PointerTrackerQueue.Element,
     }
 
     public static void switchTo(DrawingProxy drawingProxy) {
-        cancelCurrentPointerState();
+        // Only a real view swap (main <-> emoji / clipboard) invalidates the live touches. This
+        // also runs on every keyboard element change, where a key whose press changes the layout
+        // (shift, symbols) would otherwise cancel its own tracker and never deliver its release.
+        if (drawingProxy != sDrawingProxy) cancelCurrentPointerState();
         sDrawingProxy = drawingProxy;
         final Object[] thatArray = sProxyMap.get(drawingProxy); // if it's null, the view we're switching to should not exist
         sParams = (PointerTrackerParams) thatArray[0];

@@ -86,7 +86,10 @@ public class PersonalizationHelper {
 
         @Override
         public boolean accept(final File dir, final String name) {
-            return name.startsWith(mName);
+            // The separator matters: dictionary files are "<name>.<languageTag>.dict", and
+            // filesDir also holds custom_background_image / custom_font, which a bare prefix
+            // match would delete if mName were ever shortened.
+            return name.startsWith(mName + ".");
         }
     }
 }

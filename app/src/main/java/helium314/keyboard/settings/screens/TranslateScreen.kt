@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.content.edit
+import helium314.keyboard.keyboard.KeyboardSwitcher
 import helium314.keyboard.latin.R
 import helium314.keyboard.latin.settings.Defaults
 import helium314.keyboard.latin.settings.Settings
@@ -79,6 +80,9 @@ private fun TranslateEnableSwitch(setting: Setting) {
             onConfirmed = {
                 showPrivacyDialog.value = false
                 prefs.edit { putBoolean(setting.key, true) }
+                // The flag is read when the keyboard is parsed and baked into the layout cache,
+                // so without this the Translate key stays absent until the next theme change.
+                KeyboardSwitcher.getInstance().setThemeNeedsReload()
             },
             title = { Text(stringResource(R.string.translate_enable_privacy_title)) },
             content = { Text(stringResource(R.string.translate_enable_privacy_message)) },
@@ -101,7 +105,8 @@ private fun TranslateEnableSwitch(setting: Setting) {
                 showPrivacyDialog.value = true
                 false
             }
-        }
+        },
+        onCheckedChange = { KeyboardSwitcher.getInstance().setThemeNeedsReload() }
     )
 }
 

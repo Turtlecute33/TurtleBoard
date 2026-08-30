@@ -150,7 +150,7 @@ class ClipboardHistoryView @JvmOverloads constructor(
         // cancels the request rather than leaving it to finish into nothing.
         onCancelTranslate()
         translateManager = null
-        bottomRowKeyboardView.visibility = GONE
+        hideTypingKeyboard()
         clipboardHistoryManager?.setHistoryChangeListener(null)
         clipboardHistoryManager = null
     }
@@ -286,7 +286,7 @@ class ClipboardHistoryView @JvmOverloads constructor(
         panelState.typingMode = null
         panelState.buffer.clear()
         refreshClips()
-        bottomRowKeyboardView.visibility = GONE
+        hideTypingKeyboard()
     }
 
     /** Shows a full keyboard below the panel, typing into the panel instead of the app */
@@ -297,6 +297,17 @@ class ClipboardHistoryView @JvmOverloads constructor(
         bottomRowKeyboardView.setKeyboard(keyboard)
         bottomRowKeyboardView.visibility = VISIBLE
         return true
+    }
+
+    /**
+     * Undoes [showTypingKeyboard]. The listener it installs is process-wide
+     * (MainKeyboardView.setKeyboardActionListener writes the static PointerTracker.sListener), so
+     * leaving it in place sends every later key press into the panel buffer instead of the app.
+     */
+    private fun hideTypingKeyboard() {
+        if (bottomRowKeyboardView.visibility != VISIBLE) return
+        bottomRowKeyboardView.visibility = GONE
+        bottomRowKeyboardView.setKeyboardActionListener(keyboardActionListener)
     }
 
     private fun buildTypingKeyboard(elementId: Int): Keyboard? {

@@ -13,6 +13,7 @@ import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
+import android.os.Looper;
 import android.view.ContextThemeWrapper;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -561,6 +562,13 @@ public final class KeyboardSwitcher implements KeyboardState.SwitchActions {
      * @param briefToast If true, the toast duration will be short; otherwise, it will last longer.
      */
     public void showToast(final String text, final boolean briefToast){
+        // Callers include the suggestion worker thread (InputLogic.getSuggestedWords catches there
+        // and reports through here). Both branches below need the main thread: Toast needs a
+        // looper, and showFakeToast touches an attached View.
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mLatinIME.mHandler.post(() -> showToast(text, briefToast));
+            return;
+        }
         // In API 32 and below, toasts can be shown without a notification permission.
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
             final int toastLength = briefToast ? Toast.LENGTH_SHORT : Toast.LENGTH_LONG;
@@ -579,7 +587,8 @@ public final class KeyboardSwitcher implements KeyboardState.SwitchActions {
 
     // Displays a toast-like message with the provided text for a specified duration.
     private void showFakeToast(final String text, final int timeMillis) {
-        if (mFakeToastView.getVisibility() == View.VISIBLE) return;
+        // Keyboard load can fail before onCreateInputView has resolved the view.
+        if (mFakeToastView == null || mFakeToastView.getVisibility() == View.VISIBLE) return;
 
         final Drawable appIcon = mFakeToastView.getCompoundDrawables()[0];
         if (appIcon != null) {
@@ -710,8 +719,12 @@ public final class KeyboardSwitcher implements KeyboardState.SwitchActions {
         final SharedPreferences prefs = KtxKt.prefs(displayContext);
         if (mSuggestionStripView != null)
             prefs.unregisterOnSharedPreferenceChangeListener(mSuggestionStripView);
-        if (mClipboardHistoryView != null)
+        if (mClipboardHistoryView != null) {
             prefs.unregisterOnSharedPreferenceChangeListener(mClipboardHistoryView);
+            // The outgoing view still holds the DAO history listener, which blocks clip retention
+            // for the whole process, and the global typing listener if the panel editor was open.
+            mClipboardHistoryView.stopClipboardHistory();
+        }
         if (mThemeNeedsReload) // necessary in some cases (e.g. theme switch) when mThemeNeedsReload is set before first keyboard load
             Settings.getInstance().loadSettings(displayContext, Settings.getValues().mLocale, Settings.getValues().mInputAttributes);
 

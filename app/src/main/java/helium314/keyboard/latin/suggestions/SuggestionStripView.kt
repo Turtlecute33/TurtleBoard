@@ -258,6 +258,10 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     }
 
     fun setSuggestions(suggestions: SuggestedWords, isRtlLanguage: Boolean) {
+        // A voice / text fix / translate overlay owns the strip until it is dismissed. Clearing it
+        // for a routine suggestion refresh detached the overlay and left the feature running with
+        // no visible indicator or button.
+        if (hasOverlay) return
         clear()
         setRtl(isRtlLanguage)
         suggestedWords = suggestions
@@ -289,6 +293,11 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     }
 
     fun setExternalSuggestionView(view: View?, addCloseButton: Boolean) {
+        if (hasOverlay) return // clipboard chips and inline autofill must not evict a live overlay
+        attachExternalSuggestionView(view, addCloseButton)
+    }
+
+    private fun attachExternalSuggestionView(view: View?, addCloseButton: Boolean) {
         clear()
         isExternalSuggestionVisible = true
 
@@ -312,6 +321,32 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         if (Settings.getValues().mAutoHideToolbar) setToolbarVisibility(false)
     }
 
+    // --- Shared overlay plumbing (voice, text fix, translate) ---
+
+    /** Toolbar state to put back once the overlay goes; null while no overlay is installed. */
+    private var toolbarVisibleBeforeOverlay: Boolean? = null
+
+    private val hasOverlay get() = recordingOverlay != null || textFixOverlay != null || translateOverlay != null
+
+    /**
+     * Installs an overlay and makes sure it is actually on screen. These overlays are the only
+     * surface their feature has, so — unlike a clipboard chip — they must show even when the
+     * toolbar is expanded, which hides [suggestionsStrip] entirely.
+     */
+    private fun showOverlay(view: View) {
+        if (toolbarVisibleBeforeOverlay == null) toolbarVisibleBeforeOverlay = toolbarContainer.isVisible
+        setToolbarVisibility(false)
+        pinnedKeys.isVisible = false // an unweighted sibling would squeeze the overlay off-screen
+        attachExternalSuggestionView(view, false)
+    }
+
+    private fun hideOverlay() {
+        clear()
+        isExternalSuggestionVisible = false
+        toolbarVisibleBeforeOverlay?.let { setToolbarVisibility(it) }
+        toolbarVisibleBeforeOverlay = null
+    }
+
     private var recordingOverlay: RecordingOverlayView? = null
     private var onStopRecording: Runnable? = null
     private var onCancelRecording: Runnable? = null
@@ -329,36 +364,35 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         voiceTelemetryProvider = provider
     }
 
+    // The overlay is attached before its state is set: announceForAccessibility is a no-op on a
+    // detached view, so TalkBack never heard "recording started" the other way round.
     fun showRecordingOverlay() {
-        val overlay = ensureRecordingOverlay()
-        overlay.showRecording()
-        setExternalSuggestionView(overlay, false)
+        ensureRecordingOverlay().showRecording()
     }
 
     fun showTranscribingOverlay() {
         // The overlay may be absent if the strip was recreated while the upload was in flight
         // (theme reload, configuration change) — create it so the transcribing state still shows.
-        val overlay = ensureRecordingOverlay()
-        overlay.showTranscribing()
-        setExternalSuggestionView(overlay, false)
+        ensureRecordingOverlay().showTranscribing()
     }
 
     private fun ensureRecordingOverlay(): RecordingOverlayView {
-        recordingOverlay?.let { return it }
-        val overlay = RecordingOverlayView(context)
-        overlay.setColors(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
-        overlay.onStopClick = { onStopRecording?.run() }
-        overlay.onCancelClick = { onCancelRecording?.run() }
-        overlay.telemetryProvider = voiceTelemetryProvider
-        recordingOverlay = overlay
+        val overlay = recordingOverlay ?: RecordingOverlayView(context).also {
+            it.setColors(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
+            it.onStopClick = { onStopRecording?.run() }
+            it.onCancelClick = { onCancelRecording?.run() }
+            it.telemetryProvider = voiceTelemetryProvider
+            recordingOverlay = it
+        }
+        if (overlay.parent == null) showOverlay(overlay)
         return overlay
     }
 
     fun hideRecordingOverlay() {
-        recordingOverlay?.stopAnimation()
+        val overlay = recordingOverlay ?: return
+        overlay.stopAnimation()
         recordingOverlay = null
-        clear()
-        isExternalSuggestionVisible = false
+        hideOverlay()
     }
 
     // --- Text fix overlay ---
@@ -390,21 +424,20 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     }
 
     private fun ensureTextFixOverlay(): TextFixOverlayView {
-        textFixOverlay?.let { return it }
-        val overlay = TextFixOverlayView(context).also {
+        val overlay = textFixOverlay ?: TextFixOverlayView(context).also {
             it.setColors(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
             it.onReplaceClick = { onReplaceTextFix?.run() }
             it.onDiscardClick = { onDiscardTextFix?.run() }
+            textFixOverlay = it
         }
-        setExternalSuggestionView(overlay, false)
-        textFixOverlay = overlay
+        if (overlay.parent == null) showOverlay(overlay)
         return overlay
     }
 
     fun hideTextFixOverlay() {
+        if (textFixOverlay == null) return
         textFixOverlay = null
-        clear()
-        isExternalSuggestionVisible = false
+        hideOverlay()
     }
 
     // --- Translate overlay ---
@@ -434,27 +467,20 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     }
 
     private fun ensureTranslateOverlay(): TranslateOverlayView {
-        translateOverlay?.let {
-            // The strip is cleared by any suggestion update, which detaches the overlay while the
-            // request is still running. Re-attach instead of leaving an invisible overlay behind.
-            if (it.parent == null) setExternalSuggestionView(it, false)
-            return it
-        }
-        val overlay = TranslateOverlayView(context).also {
+        val overlay = translateOverlay ?: TranslateOverlayView(context).also {
             it.setColors(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
             it.onLanguageClick = { language -> onPickTranslateLanguage?.invoke(language) }
             it.onCancelClick = { onCancelTranslate?.run() }
+            translateOverlay = it
         }
-        setExternalSuggestionView(overlay, false)
-        translateOverlay = overlay
+        if (overlay.parent == null) showOverlay(overlay)
         return overlay
     }
 
     fun hideTranslateOverlay() {
         if (translateOverlay == null) return
         translateOverlay = null
-        clear()
-        isExternalSuggestionVisible = false
+        hideOverlay()
     }
 
     fun setMoreSuggestionsHeight(remainingHeight: Int) {

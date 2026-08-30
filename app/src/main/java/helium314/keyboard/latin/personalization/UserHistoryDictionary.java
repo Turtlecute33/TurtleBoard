@@ -27,7 +27,10 @@ import java.util.Map;
  * typist over time.
  */
 public class UserHistoryDictionary extends ExpandableBinaryDictionary {
-    static final String NAME = UserHistoryDictionary.class.getSimpleName();
+    // Must be a literal, like the other dictionaries. getSimpleName() is rewritten by R8 in
+    // release builds, which both orphaned the learned words on every rebuild and turned the
+    // prefix filter in PersonalizationHelper into a match for unrelated files in filesDir.
+    static final String NAME = "UserHistoryDictionary";
 
     // TODO: Make this constructor private
     UserHistoryDictionary(final Context context, final Locale locale) {

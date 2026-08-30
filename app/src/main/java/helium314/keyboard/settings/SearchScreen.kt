@@ -244,7 +244,10 @@ fun <T: Any?> SearchScreen(
                         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
                     ) { innerPadding ->
                         LazyColumn(contentPadding = innerPadding.plusVertical()) {
-                            items(items, key = { it ?: "__null_item__" }) {
+                            // No `key` here: T is arbitrary (Setting, ColorSetting, Word), and a
+                            // key that cannot go into a Bundle makes LazySaveableStateHolder throw.
+                            // The list is rebuilt by remember(query) anyway, so identity buys nothing.
+                            items(items) {
                                 // Search results have no categories to group by, so each hit is its
                                 // own card.
                                 PreferenceGroupSurface(PreferenceGroupPosition.SINGLE) {
