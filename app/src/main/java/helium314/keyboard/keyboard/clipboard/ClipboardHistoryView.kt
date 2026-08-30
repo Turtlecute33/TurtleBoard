@@ -32,6 +32,7 @@ import helium314.keyboard.latin.settings.Settings
 import helium314.keyboard.latin.utils.ImeComposeHost
 import helium314.keyboard.latin.utils.Log
 import helium314.keyboard.latin.utils.ResourceUtils
+import helium314.keyboard.latin.voice.TranslateManager
 
 /**
  * The clipboard panel: a Compose (Material 3) list of clips, filling the whole keyboard area.
@@ -59,6 +60,8 @@ class ClipboardHistoryView @JvmOverloads constructor(
 
     lateinit var keyboardActionListener: KeyboardActionListener
     private var clipboardHistoryManager: ClipboardHistoryManager? = null
+    /** Owned by the IME, borrowed while the panel is up; null when the IME has none yet. */
+    private var translateManager: TranslateManager? = null
     private var typingElementId = KeyboardId.ELEMENT_ALPHABET
     private var oneShotShift = false
 
@@ -111,17 +114,25 @@ class ClipboardHistoryView @JvmOverloads constructor(
             historyManager: ClipboardHistoryManager,
             keyVisualAttr: KeyVisualAttributes?,
             editorInfo: EditorInfo,
-            keyboardActionListener: KeyboardActionListener
+            keyboardActionListener: KeyboardActionListener,
+            translateManager: TranslateManager?
     ) {
         clipboardHistoryManager = historyManager
+        this.translateManager = translateManager
         initialize()
         historyManager.prepareClipboardHistory()
         historyManager.setHistoryChangeListener(this)
 
         panelState.typingMode = null
         panelState.menuFor = null
+        panelState.pickingLanguage = false
+        panelState.translating = false
         panelState.filter = ClipFilter.ALL
         panelState.buffer.clear()
+        // Read once per panel opening: the pref can only change from a settings screen, which
+        // reloads the keyboard anyway.
+        panelState.translateLanguages = if (translateManager != null && Settings.getValues().mTranslateEnabled)
+            translateManager.languages() else emptyList()
         refreshClips()
 
         // browsing needs no keys at all: the list gets the whole panel until typing starts
@@ -134,6 +145,11 @@ class ClipboardHistoryView @JvmOverloads constructor(
         panelState.typingMode = null
         panelState.buffer.clear()
         panelState.menuFor = null
+        panelState.pickingLanguage = false
+        // The panel is the only surface that could show this request's result, so closing it
+        // cancels the request rather than leaving it to finish into nothing.
+        onCancelTranslate()
+        translateManager = null
         bottomRowKeyboardView.visibility = GONE
         clipboardHistoryManager?.setHistoryChangeListener(null)
         clipboardHistoryManager = null
@@ -152,11 +168,45 @@ class ClipboardHistoryView @JvmOverloads constructor(
     override fun onPaste(item: ClipItem) {
         val wasSearching = panelState.typingMode is TypingMode.Search
         if (wasSearching) finishTyping(commit = false)
+        pasteText(item.text)
+    }
+
+    private fun pasteText(text: String) {
         keyboardActionListener.onPressKey(KeyCode.NOT_SPECIFIED, 0, true, HapticEvent.KEY_PRESS)
-        keyboardActionListener.onTextInput(item.text)
+        keyboardActionListener.onTextInput(text)
         keyboardActionListener.onReleaseKey(KeyCode.NOT_SPECIFIED, false)
         if (Settings.getValues().mAlphaAfterClipHistoryEntry)
             keyboardActionListener.onCodeInput(KeyCode.ALPHA, Constants.NOT_A_COORDINATE, Constants.NOT_A_COORDINATE, false)
+    }
+
+    override fun onTranslate(item: ClipItem, language: String) {
+        val manager = translateManager ?: return
+        performKeyFeedback()
+        panelState.pickingLanguage = false
+        manager.startTranslate(item.text, language, object : TranslateManager.Callbacks {
+            override fun onWorking() {
+                panelState.translating = true
+            }
+
+            override fun onFinished() {
+                panelState.translating = false
+            }
+
+            override fun onResult(originalText: String, translatedText: String) {
+                panelState.menuFor = null
+                pasteText(translatedText)
+            }
+
+            override fun onError(message: String) {
+                panelState.menuFor = null
+                KeyboardSwitcher.getInstance().showToast(message, true)
+            }
+        })
+    }
+
+    override fun onCancelTranslate() {
+        translateManager?.cancel()
+        panelState.translating = false
     }
 
     override fun onTogglePin(id: Long) {

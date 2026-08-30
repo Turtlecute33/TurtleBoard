@@ -45,9 +45,11 @@ class AudioRecorder(
     /** If >0, stop after this many contiguous ms of silence once the user has spoken at least once. */
     private val autoStopSilenceMs: Long = 0L,
     /**
-     * Linear gain applied to every captured sample before it is measured and written. 1f is a
-     * no-op; values >1 boost quiet microphones (some OEM devices capture well below line level,
-     * so normal speech would otherwise fall under the silence gate). Clipped to 16-bit range.
+     * Linear gain applied to every captured sample before it is written. 1f is a no-op; values >1
+     * boost quiet microphones (some OEM devices capture well below line level, so normal speech
+     * would otherwise be inaudible to the provider). Amplitude measurement for the silence
+     * heuristics always uses the un-gained samples so thresholds stay comparable across settings.
+     * Clipped to 16-bit range.
      */
     private val inputGain: Float = 1f,
 ) {
@@ -80,6 +82,12 @@ class AudioRecorder(
     @Volatile private var cancelRequested = false
     @Volatile private var recordingStartMs: Long = 0L
     private var completion: CompletableDeferred<File?>? = null
+    /**
+     * Serializes AudioRecord stop/release. The async-stop dispatcher and the recording thread's
+     * teardown can otherwise call stop()/release() on the same instance concurrently, which
+     * AudioRecord does not guarantee to tolerate (flaky on OEM HALs).
+     */
+    private val teardownLock = Any()
 
     /** Duration of the last completed recording, in milliseconds. Updated by [stop]. */
     @Volatile var lastDurationMs: Long = 0L
@@ -101,11 +109,20 @@ class AudioRecorder(
     var onAutoStopSilence: (() -> Unit)? = null
 
     fun start(): Boolean {
-        val bufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
-        if (bufferSize == AudioRecord.ERROR_BAD_VALUE || bufferSize == AudioRecord.ERROR) {
-            Log.e(TAG, "Invalid buffer size: $bufferSize")
+        if (isRecording) {
+            // A second start would overwrite audioRecord while the first loop still reads it,
+            // leaking the original AudioRecord (and the microphone) until process death.
+            Log.w(TAG, "start() called while already recording")
             return false
         }
+        val minBufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
+        if (minBufferSize == AudioRecord.ERROR_BAD_VALUE || minBufferSize == AudioRecord.ERROR) {
+            Log.e(TAG, "Invalid buffer size: $minBufferSize")
+            return false
+        }
+        // 2x headroom over the minimum: read, write and gain all run on this thread, and a
+        // buffer sized exactly at the minimum underruns more easily on slow devices.
+        val bufferSize = minBufferSize * 2
 
         return try {
             audioRecord = AudioRecord(
@@ -195,6 +212,11 @@ class AudioRecorder(
             val read = audioRecord?.read(buffer, 0, buffer.size) ?: AudioRecord.ERROR_INVALID_OPERATION
             when {
                 read > 0 -> {
+                    // Measure amplitude BEFORE applying inputGain. The speech/silence thresholds
+                    // are absolute (0..32767); measuring post-gain makes "max" sensitivity trip
+                    // the speech detector on ambient noise, which permanently disables
+                    // auto-stop-on-silence and lets near-silence pass the post-stop gate.
+                    val amp = chunkMeanAmplitude(buffer, read)
                     if (inputGain != 1f) applyGain(buffer, read, inputGain)
                     try {
                         pcmOutputFile?.write(buffer, 0, read)
@@ -204,7 +226,6 @@ class AudioRecorder(
                         isRecording = false
                         break
                     }
-                    val amp = chunkMeanAmplitude(buffer, read)
                     currentAmplitude = amp
                     // Running mean for post-stop gate — avoids re-reading the whole file.
                     val samples = read / 2
@@ -286,18 +307,27 @@ class AudioRecorder(
     private fun dispatchAudioRecordStopAsync() {
         val ar = audioRecord ?: return
         audioStopScope.launch(CoroutineName("AudioRecorderStop")) {
-            try { ar.stop() } catch (e: IllegalStateException) {
-                Log.w(TAG, "AudioRecord.stop() failed", e)
+            synchronized(teardownLock) {
+                try { ar.stop() } catch (e: IllegalStateException) {
+                    // Already stopped or released — nothing to do.
+                    Log.w(TAG, "AudioRecord.stop() failed", e)
+                }
             }
         }
     }
 
     private fun cleanupAudioRecord() {
-        try { audioRecord?.stop() } catch (_: Throwable) {}
+        stopAndReleaseAudioRecord()
         releaseAudioEffects()
-        try { audioRecord?.release() } catch (_: Throwable) {}
-        audioRecord = null
         recordingStartMs = 0L
+    }
+
+    private fun stopAndReleaseAudioRecord() {
+        synchronized(teardownLock) {
+            try { audioRecord?.stop() } catch (_: Throwable) {}
+            try { audioRecord?.release() } catch (_: Throwable) {}
+            audioRecord = null
+        }
     }
 
     private fun finalizeOutputFile(): File? {
@@ -341,8 +371,7 @@ class AudioRecorder(
         recordingStartMs = 0L
         closeOutputSafely()
         releaseAudioEffects()
-        try { audioRecord?.release() } catch (_: Throwable) {}
-        audioRecord = null
+        stopAndReleaseAudioRecord()
     }
 
     private fun cleanupRecordingFailure() {
@@ -351,8 +380,7 @@ class AudioRecorder(
         recordingJob = null
         closeOutputSafely()
         releaseAudioEffects()
-        try { audioRecord?.release() } catch (_: Throwable) {}
-        audioRecord = null
+        stopAndReleaseAudioRecord()
         if (outputFile.exists()) outputFile.delete()
         resetCounters()
     }

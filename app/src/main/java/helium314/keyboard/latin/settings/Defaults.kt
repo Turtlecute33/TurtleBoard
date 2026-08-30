@@ -232,6 +232,14 @@ object Defaults {
     const val PREF_TEXT_FIX_PROMPT = "You are a writing assistant. Improve the following text: fix typos, grammar, and punctuation while preserving the original meaning, tone, and language. Output only the improved text, with no preamble, quotes, or explanation."
     const val PREF_TEXT_FIX_2_ENABLED = false
     const val PREF_TEXT_FIX_2_PROMPT = "You are a writing assistant. Rewrite the following text to be clearer and more concise while preserving the original meaning, tone, and language. Output only the rewritten text, with no preamble, quotes, or explanation."
+    const val PREF_TRANSLATE_ENABLED = false
+    const val PREF_TRANSLATE_MODEL = "~openai/gpt-mini-latest"
+    const val PREF_TRANSLATE_MODEL_CUSTOM = ""
+    // ${language} is substituted with the language the user picked in the middle menu. A custom
+    // prompt without the placeholder still works — the target language is appended as a separate
+    // instruction, see resolveTranslatePrompt.
+    const val PREF_TRANSLATE_PROMPT = "You are a translation engine. Translate the user's text into \${language}. Output only the translation, with no preamble, quotes, notes, or explanation. Preserve line breaks, formatting, names, numbers, URLs, code, and emoji. If the text is already in \${language}, output it unchanged."
+    const val PREF_TRANSLATE_LANGUAGES = "English, Italian, Spanish, French, German"
     const val PREF_POPUP_DRAG_HAPTIC = false
-    const val PREF_ACTION_POPUP_ORDER = "clipboard_action_key:true|emoji_action_key:true|shortcut_key:true|stt_action_key:true|text_fix_key:true|text_fix_2_key:true"
+    const val PREF_ACTION_POPUP_ORDER = "clipboard_action_key:true|emoji_action_key:true|shortcut_key:true|stt_action_key:true|text_fix_key:true|text_fix_2_key:true|translate_key:true"
 }

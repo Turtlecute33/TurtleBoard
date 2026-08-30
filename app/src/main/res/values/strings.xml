@@ -1295,6 +1295,7 @@ New dictionary:
     <string name="voice_test_key_invalid">API key rejected</string>
     <string name="voice_test_key_invalid_model">Selected model is unavailable</string>
     <string name="voice_test_key_network_error">Network error while testing key</string>
+    <string name="voice_test_key_response_too_large">Provider response was too large to process</string>
     <string name="voice_test_key_testing">Testing…</string>
     <string name="voice_prompt_preset">Prompt preset</string>
     <string name="voice_prompt_preset_custom">Custom</string>
@@ -1363,6 +1364,34 @@ New dictionary:
     <string name="text_fix_2_enabled_summary">Adds a second Text Fix button to long-press Return, with its own custom prompt</string>
     <string name="text_fix_2_prompt">Second Fix Prompt</string>
     <string name="text_fix_2_prompt_summary">Instruction sent for the second text fix variation</string>
+    <string name="settings_screen_translate">Translate</string>
+    <string name="translate_enabled">Enable Translate</string>
+    <string name="translate_enabled_summary">After adding a provider API key, enable this. Select text and long-press Return, then pick a language.</string>
+    <string name="translate_enable_privacy_title">Enable Translate?</string>
+    <string name="translate_enable_privacy_message">Translate sends the selected text over HTTPS to your selected AI provider using the API key you supply.</string>
+    <string name="translate_enable_privacy_confirm">Enable Translate</string>
+    <string name="translate_model">Translate Model</string>
+    <string name="translate_model_custom">Custom Model ID</string>
+    <string name="translate_model_custom_summary">Only used when Translate Model is set to Custom</string>
+    <string name="translate_prompt">Translate Prompt</string>
+    <string name="translate_prompt_summary">Instruction sent to the AI. ${language} is replaced with the language you pick.</string>
+    <string name="translate_languages">Target languages</string>
+    <string name="translate_languages_summary">Languages offered after tapping Translate, separated by commas</string>
+    <string name="translate_languages_hint">English, Italian, Spanish…</string>
+    <string name="translate_pick_language">Pick a language</string>
+    <string name="translate_working">Translating…</string>
+    <string name="translate_cancel">Cancel</string>
+    <string name="translate_error_not_enabled">Enable Translate in settings</string>
+    <string name="translate_error_no_selection">Select text first, then long-press Return to translate</string>
+    <string name="translate_error_no_text">There is no text to translate</string>
+    <string name="translate_error_no_language">Add a target language in settings</string>
+    <string name="translate_error_too_long">Selected text is too long</string>
+    <string name="translate_error_selection_changed">Selection changed; select the same text and try again</string>
+    <string name="translate_error_sensitive_field">Translate is unavailable in sensitive fields</string>
+    <string name="translate_error_unsupported_field">Translate is unavailable in this field</string>
+    <string name="translate_error_empty">The model returned no text</string>
+    <string name="translate_error_failed">Translation failed</string>
+    <string name="clipboard_action_translate">Translate</string>
     <string name="popup_drag_haptic">Haptic feedback on popup drag</string>
     <string name="popup_drag_haptic_summary">Subtle tick when sliding across popup buttons (e.g. long-press Return). Independent from keypress vibration.</string>
     <string name="action_popup_order">Long-press Return buttons</string>
@@ -1375,4 +1404,6 @@ New dictionary:
     <string name="popup_keys_text_fix_2_key" tools:keep="@string/popup_keys_text_fix_2_key">Second Text Fix</string>
     <string name="popup_keys_stt_action_key" tools:keep="@string/popup_keys_stt_action_key">STT Voice</string>
     <string name="label_stt_action_key" tools:keep="@string/label_stt_action_key">STT</string>
+    <string name="popup_keys_translate_key" tools:keep="@string/popup_keys_translate_key">Translate</string>
+    <string name="label_translate_key" tools:keep="@string/label_translate_key">Aあ</string>
 </resources>

@@ -112,18 +112,34 @@ fun VoiceScreen(
     SearchSettingsScreen(
         onClickBack = onClickBack,
         title = stringResource(R.string.settings_screen_voice),
-        settings = buildVoiceScreenItems(
-            voiceInputEnabled = voiceInputEnabled,
-            voiceModel = voiceModel,
-            sttModel = sttModel,
-            provider = AiProvider.fromPref(providerPref),
-            speechEngine = SpeechEngine.fromPref(speechEnginePref),
-            traditionalEnabled = traditionalEnabled,
-            sttEnabled = sttEnabled,
-            voiceAutoStop = voiceAutoStop,
-            autoPolishEnabled = autoPolishEnabled,
-            polishModel = polishModel,
-        )
+        // Remembered so the list (and the key/position maps SearchScreen derives from it) is only
+        // rebuilt when one of the observed preference states actually changes, not on every
+        // recomposition of this screen.
+        settings = remember(
+            voiceInputEnabled,
+            voiceModel,
+            sttModel,
+            providerPref,
+            speechEnginePref,
+            traditionalEnabled,
+            sttEnabled,
+            voiceAutoStop,
+            autoPolishEnabled,
+            polishModel,
+        ) {
+            buildVoiceScreenItems(
+                voiceInputEnabled = voiceInputEnabled,
+                voiceModel = voiceModel,
+                sttModel = sttModel,
+                provider = AiProvider.fromPref(providerPref),
+                speechEngine = SpeechEngine.fromPref(speechEnginePref),
+                traditionalEnabled = traditionalEnabled,
+                sttEnabled = sttEnabled,
+                voiceAutoStop = voiceAutoStop,
+                autoPolishEnabled = autoPolishEnabled,
+                polishModel = polishModel,
+            )
+        }
     )
 }
 
@@ -648,7 +664,10 @@ private fun VoiceApiKeyPreference(setting: Setting, provider: AiProvider) {
             }
             if (failed) {
                 Toast.makeText(ctx, R.string.voice_error_secure_storage_unavailable, Toast.LENGTH_SHORT).show()
-                storedLength = SecretStore.getApiKey(ctx, provider.apiKeyPrefKey(), provider.defaultApiKey()).length
+                // Restore the mask from the actually-stored key; also a KeyStore read, so keep it off the UI thread.
+                storedLength = withContext(Dispatchers.IO) {
+                    SecretStore.getApiKey(ctx, provider.apiKeyPrefKey(), provider.defaultApiKey()).length
+                }
             }
         }
     }
@@ -943,6 +962,8 @@ private enum class TestResult(@StringRes val messageRes: Int) {
     INVALID(R.string.voice_test_key_invalid),
     INVALID_MODEL(R.string.voice_test_key_invalid_model),
     NETWORK(R.string.voice_test_key_network_error),
+    /** HTTP 200, but the body exceeded the read cap — not a connectivity problem. */
+    TOO_LARGE(R.string.voice_test_key_response_too_large),
 }
 
 private fun probeApiKey(provider: AiProvider, apiKey: String, model: String): TestResult {
@@ -986,6 +1007,8 @@ private fun probePayPerQApiKey(apiKey: String, model: String): TestResult {
             401, 403 -> TestResult.INVALID
             else -> TestResult.NETWORK
         }
+    } catch (_: ProbeResponseTooLargeException) {
+        TestResult.TOO_LARGE
     } catch (_: Exception) {
         TestResult.NETWORK
     } finally {
@@ -1035,6 +1058,8 @@ internal fun payPerQModelsEndpoint(model: String): String = if ("/" in model) {
     OpenRouterClient.PAYPERQ_AUDIO_MODELS_ENDPOINT
 }
 
+private class ProbeResponseTooLargeException : IllegalArgumentException("Probe response too large")
+
 private fun readProbeResponseCapped(input: java.io.InputStream): String {
     val out = java.io.ByteArrayOutputStream()
     val buffer = ByteArray(8 * 1024)
@@ -1044,7 +1069,7 @@ private fun readProbeResponseCapped(input: java.io.InputStream): String {
             val read = stream.read(buffer)
             if (read == -1) break
             total += read
-            if (total > MAX_PROBE_RESPONSE_BYTES) throw IllegalArgumentException("Probe response too large")
+            if (total > MAX_PROBE_RESPONSE_BYTES) throw ProbeResponseTooLargeException()
             out.write(buffer, 0, read)
         }
     }

@@ -72,6 +72,7 @@ public class SettingsValues {
     public final boolean mShowsPopupHints;
     public final boolean mShowTldPopupKeys;
     public final boolean mTextFix2Enabled;
+    public final boolean mTranslateEnabled;
     public final boolean mVoiceSttEnabled;
     public final boolean mPopupDragHaptic;
     public final String mActionPopupOrder;
@@ -205,6 +206,7 @@ public class SettingsValues {
         mShowsPopupHints = prefs.getBoolean(Settings.PREF_SHOW_POPUP_HINTS, Defaults.PREF_SHOW_POPUP_HINTS);
         mShowTldPopupKeys = prefs.getBoolean(Settings.PREF_SHOW_TLD_POPUP_KEYS, Defaults.PREF_SHOW_TLD_POPUP_KEYS);
         mTextFix2Enabled = prefs.getBoolean(Settings.PREF_TEXT_FIX_2_ENABLED, Defaults.PREF_TEXT_FIX_2_ENABLED);
+        mTranslateEnabled = prefs.getBoolean(Settings.PREF_TRANSLATE_ENABLED, Defaults.PREF_TRANSLATE_ENABLED);
         mVoiceSttEnabled = prefs.getBoolean(Settings.PREF_VOICE_STT_ENABLED, Defaults.PREF_VOICE_STT_ENABLED);
         mPopupDragHaptic = prefs.getBoolean(Settings.PREF_POPUP_DRAG_HAPTIC, Defaults.PREF_POPUP_DRAG_HAPTIC);
         // Earlier 6.1.x betas saved this pref with the wrong separators (',' / ';'). Detect such

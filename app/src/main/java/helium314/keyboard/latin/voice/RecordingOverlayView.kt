@@ -149,6 +149,10 @@ class RecordingOverlayView(context: Context) : LinearLayout(context) {
                 if (telemetry != null) {
                     meterView.setAmplitude(telemetry.first)
                     timerText.text = formatElapsed(telemetry.second)
+                } else {
+                    // Nothing to display — stop self-posting instead of waking up at 12.5 Hz for nothing.
+                    stopTicking()
+                    return
                 }
                 tickHandler.postDelayed(this, 80L)
             }

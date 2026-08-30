@@ -106,6 +106,13 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     public static final String PREF_TEXT_FIX_PROMPT = "text_fix_prompt";
     public static final String PREF_TEXT_FIX_2_ENABLED = "text_fix_2_enabled";
     public static final String PREF_TEXT_FIX_2_PROMPT = "text_fix_2_prompt";
+
+    public static final String PREF_TRANSLATE_ENABLED = "translate_enabled";
+    public static final String PREF_TRANSLATE_MODEL = "translate_model";
+    public static final String PREF_TRANSLATE_MODEL_CUSTOM = "translate_model_custom";
+    public static final String PREF_TRANSLATE_PROMPT = "translate_prompt";
+    public static final String PREF_TRANSLATE_LANGUAGES = "translate_languages";
+
     public static final String PREF_POPUP_DRAG_HAPTIC = "popup_drag_haptic";
     public static final String PREF_ACTION_POPUP_ORDER = "action_popup_order";
 

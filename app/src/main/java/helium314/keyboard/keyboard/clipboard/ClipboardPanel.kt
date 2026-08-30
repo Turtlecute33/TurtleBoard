@@ -54,6 +54,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -422,7 +423,7 @@ private fun BoxScope.ClipActionSheet(state: ClipboardPanelState, actions: Clipbo
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null
-                ) { state.menuFor = null }
+                ) { dismissSheet(state, actions) }
         )
     }
     AnimatedVisibility(
@@ -456,41 +457,111 @@ private fun BoxScope.ClipActionSheet(state: ClipboardPanelState, actions: Clipbo
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
                 Spacer(Modifier.height(6.dp))
-                Row(
-                    Modifier
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    SheetAction(R.drawable.sym_keyboard_paste, R.string.clipboard_action_paste) {
-                        state.menuFor = null
-                        actions.onPaste(sheetItem)
-                    }
-                    SheetAction(
-                        state.pinIconRes,
-                        if (sheetItem.isPinned) R.string.clipboard_action_unpin else R.string.clipboard_action_pin,
-                        highlighted = sheetItem.isPinned
+                when {
+                    state.translating -> TranslatingRow(actions)
+                    state.pickingLanguage -> LanguageRow(sheetItem, state, actions)
+                    else -> Row(
+                        Modifier
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        state.menuFor = null
-                        actions.onTogglePin(sheetItem.id)
-                    }
-                    SheetAction(R.drawable.ic_edit, R.string.clipboard_action_edit) {
-                        state.menuFor = null
-                        actions.onStartEdit(sheetItem)
-                    }
-                    SheetAction(R.drawable.sym_keyboard_copy, R.string.clipboard_action_copy) {
-                        state.menuFor = null
-                        actions.onCopy(sheetItem)
-                    }
-                    SheetAction(R.drawable.ic_share, R.string.clipboard_action_share) {
-                        state.menuFor = null
-                        actions.onShare(sheetItem)
-                    }
-                    SheetAction(R.drawable.ic_bin, R.string.clipboard_action_delete, destructive = true) {
-                        state.menuFor = null
-                        actions.onDelete(sheetItem.id)
+                        SheetAction(R.drawable.sym_keyboard_paste, R.string.clipboard_action_paste) {
+                            state.menuFor = null
+                            actions.onPaste(sheetItem)
+                        }
+                        if (state.translateLanguages.isNotEmpty()) {
+                            SheetAction(R.drawable.ic_translate, R.string.clipboard_action_translate) {
+                                state.pickingLanguage = true
+                            }
+                        }
+                        SheetAction(
+                            state.pinIconRes,
+                            if (sheetItem.isPinned) R.string.clipboard_action_unpin else R.string.clipboard_action_pin,
+                            highlighted = sheetItem.isPinned
+                        ) {
+                            state.menuFor = null
+                            actions.onTogglePin(sheetItem.id)
+                        }
+                        SheetAction(R.drawable.ic_edit, R.string.clipboard_action_edit) {
+                            state.menuFor = null
+                            actions.onStartEdit(sheetItem)
+                        }
+                        SheetAction(R.drawable.sym_keyboard_copy, R.string.clipboard_action_copy) {
+                            state.menuFor = null
+                            actions.onCopy(sheetItem)
+                        }
+                        SheetAction(R.drawable.ic_share, R.string.clipboard_action_share) {
+                            state.menuFor = null
+                            actions.onShare(sheetItem)
+                        }
+                        SheetAction(R.drawable.ic_bin, R.string.clipboard_action_delete, destructive = true) {
+                            state.menuFor = null
+                            actions.onDelete(sheetItem.id)
+                        }
                     }
                 }
+            }
+        }
+    }
+}
+
+/** Closes the action sheet, aborting a translation that is still running behind it. */
+private fun dismissSheet(state: ClipboardPanelState, actions: ClipboardPanelActions) {
+    if (state.translating) actions.onCancelTranslate()
+    state.pickingLanguage = false
+    state.menuFor = null
+}
+
+/** The middle menu: one chip per configured target language, plus a way back to the actions. */
+@Composable
+private fun LanguageRow(item: ClipItem, state: ClipboardPanelState, actions: ClipboardPanelActions) {
+    Row(
+        Modifier
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        SmallIconButton(
+            iconRes = R.drawable.ic_arrow_back,
+            description = stringResource(R.string.spoken_description_action_previous),
+            onClick = { state.pickingLanguage = false }
+        )
+        state.translateLanguages.forEach { language ->
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                shape = CircleShape,
+                modifier = Modifier.height(38.dp).clickable { actions.onTranslate(item, language) }
+            ) {
+                Box(Modifier.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
+                    Text(language, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TranslatingRow(actions: ClipboardPanelActions) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            stringResource(R.string.translate_working),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f)
+        )
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            shape = CircleShape,
+            modifier = Modifier.height(38.dp).clickable { actions.onCancelTranslate() }
+        ) {
+            Box(Modifier.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
+                Text(stringResource(R.string.translate_cancel), style = MaterialTheme.typography.labelLarge)
             }
         }
     }
@@ -579,7 +650,9 @@ private fun SearchLayer(state: ClipboardPanelState, actions: ClipboardPanelActio
                 onClick = { actions.onFinishTyping(false) }
             )
         }
-        val results = state.searchResults()
+        // Filtering and sorting walks the full text of every clip; derive it so it only runs when
+        // the query or the clip list actually changes, not on every SearchLayer recomposition.
+        val results by remember(state) { derivedStateOf { state.searchResults() } }
         if (results.isEmpty()) {
             Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                 Text(

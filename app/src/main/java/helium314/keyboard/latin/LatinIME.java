@@ -88,6 +88,7 @@ import helium314.keyboard.latin.utils.SubtypeSettings;
 import helium314.keyboard.latin.utils.SubtypeState;
 import helium314.keyboard.latin.utils.ToolbarMode;
 import helium314.keyboard.latin.voice.TextFixManager;
+import helium314.keyboard.latin.voice.TranslateManager;
 import helium314.keyboard.latin.voice.VoiceDestinationGuard;
 import helium314.keyboard.latin.voice.VoiceInputManager;
 import helium314.keyboard.settings.SettingsActivity2;
@@ -149,6 +150,11 @@ public class LatinIME extends InputMethodService implements
     private TextFixManager mTextFixManager;
     private String mPendingTextFixOriginal;
     private String mPendingTextFixProposed;
+    private TranslateManager mTranslateManager;
+    /** Selected text captured when the Translate key was pressed, kept until the request settles. */
+    private String mPendingTranslateSource;
+    /** True while the language middle menu is on screen, so a recreated strip can restore it. */
+    private boolean mTranslateMenuOpen;
     /**
      * Identity of the editor a voice recording was started against, or null when there is nothing
      * in flight. Compared against the current editor before a transcription is inserted so audio
@@ -165,6 +171,7 @@ public class LatinIME extends InputMethodService implements
     private final android.os.Handler mTextFixOverlayHandler =
             new android.os.Handler(android.os.Looper.getMainLooper());
     private Runnable mTextFixErrorOverlayHideRunnable;
+    private Runnable mTranslateErrorOverlayHideRunnable;
 
     private RichInputMethodManager mRichImm;
     final KeyboardSwitcher mKeyboardSwitcher;
@@ -765,18 +772,7 @@ public class LatinIME extends InputMethodService implements
             @Nullable
             @Override
             public Integer getBlockedErrorResId() {
-                final SettingsValues settingsValues = mSettings.getCurrent();
-                if (settingsValues == null) {
-                    return R.string.text_fix_error_unsupported_field;
-                }
-                final EditorInfo ei = getCurrentInputEditorInfo();
-                final int imeOptions = ei != null ? ei.imeOptions : 0;
-                return TextFixManager.getBlockedErrorResId(
-                        settingsValues.mInputAttributes.mInputType,
-                        settingsValues.mInputAttributes.mIsPasswordField,
-                        settingsValues.mInputAttributes.mNoLearning,
-                        settingsValues.mIncognitoModeEnabled,
-                        imeOptions);
+                return currentFieldBlockedErrorResId();
             }
 
             @Nullable
@@ -837,6 +833,37 @@ public class LatinIME extends InputMethodService implements
                 }
             }
         });
+
+        // Translation writes into the same editor as Text Fix, so it is gated by the same field
+        // check — only the wording of the refusal differs.
+        mTranslateManager = new TranslateManager(this, () -> {
+            final Integer blocked = currentFieldBlockedErrorResId();
+            if (blocked == null) return null;
+            if (blocked == R.string.text_fix_error_sensitive_field) {
+                return R.string.translate_error_sensitive_field;
+            }
+            return R.string.translate_error_unsupported_field;
+        });
+    }
+
+    /**
+     * A string resource explaining why the focused editor must not receive AI-generated text
+     * (password field, incognito, unsupported input type, …), or null when it may.
+     */
+    @Nullable
+    private Integer currentFieldBlockedErrorResId() {
+        final SettingsValues settingsValues = mSettings.getCurrent();
+        if (settingsValues == null) {
+            return R.string.text_fix_error_unsupported_field;
+        }
+        final EditorInfo ei = getCurrentInputEditorInfo();
+        final int imeOptions = ei != null ? ei.imeOptions : 0;
+        return TextFixManager.getBlockedErrorResId(
+                settingsValues.mInputAttributes.mInputType,
+                settingsValues.mInputAttributes.mIsPasswordField,
+                settingsValues.mInputAttributes.mNoLearning,
+                settingsValues.mIncognitoModeEnabled,
+                imeOptions);
     }
 
     private static final long TEXT_FIX_ERROR_OVERLAY_HIDE_MS = 3500L;
@@ -846,6 +873,156 @@ public class LatinIME extends InputMethodService implements
         mTextFixOverlayHandler.removeCallbacks(mTextFixErrorOverlayHideRunnable);
         mTextFixErrorOverlayHideRunnable = null;
     }
+
+    // region Translate
+
+    /** The clipboard panel drives its own translations through this same manager. */
+    @Nullable
+    public TranslateManager getTranslateManager() {
+        return mTranslateManager;
+    }
+
+    /**
+     * Long-press Return → Translate. Opens the language middle menu, or closes it (cancelling an
+     * in-flight request) when it is already up, so the key toggles like the voice key does.
+     */
+    private void onTranslateKeyPressed() {
+        if (mTranslateManager == null) return;
+        if (mTranslateMenuOpen || mTranslateManager.getState() == TranslateManager.State.WORKING) {
+            clearPendingTranslateState();
+            return;
+        }
+        final String reason = mTranslateManager.unavailableReason();
+        if (reason != null) {
+            Toast.makeText(this, reason, Toast.LENGTH_LONG).show();
+            return;
+        }
+        final CharSequence selected;
+        try {
+            selected = mInputLogic.mConnection.getSelectedText(0);
+        } catch (Exception e) {
+            Toast.makeText(this, R.string.translate_error_no_selection, Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (selected == null || selected.toString().trim().isEmpty()) {
+            Toast.makeText(this, R.string.translate_error_no_selection, Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (mSuggestionStripView == null) return;
+        // Voice, Text Fix and Translate all take over the suggestion strip; make them mutually
+        // exclusive instead of letting the newest one stomp the previous one's overlay.
+        cancelVoiceRecordingIfCapturing();
+        clearPendingTextFixState();
+        clearPendingTranslateState();
+        mPendingTranslateSource = selected.toString();
+        showTranslateLanguageMenu();
+    }
+
+    private void showTranslateLanguageMenu() {
+        if (mSuggestionStripView == null || mTranslateManager == null) return;
+        mTranslateMenuOpen = true;
+        mSuggestionStripView.setOnPickTranslateLanguage(language -> {
+            startTranslateOverSelection(language);
+            return Unit.INSTANCE;
+        });
+        mSuggestionStripView.setOnCancelTranslate(this::clearPendingTranslateState);
+        mSuggestionStripView.showTranslateLanguages(mTranslateManager.languages());
+    }
+
+    private void startTranslateOverSelection(@NonNull final String language) {
+        if (mTranslateManager == null) return;
+        if (mPendingTranslateSource == null) {
+            clearPendingTranslateState();
+            return;
+        }
+        mTranslateMenuOpen = false;
+        mTranslateManager.startTranslate(mPendingTranslateSource, language, new TranslateManager.Callbacks() {
+            @Override
+            public void onWorking() {
+                cancelPendingTranslateErrorOverlayHide();
+                if (mSuggestionStripView != null) {
+                    mSuggestionStripView.setOnCancelTranslate(LatinIME.this::clearPendingTranslateState);
+                    mSuggestionStripView.showTranslateWorking();
+                }
+            }
+
+            @Override
+            public void onFinished() {
+                // The overlay is dismissed by whichever of onResult / onError follows.
+            }
+
+            @Override
+            public void onResult(@NonNull final String originalText, @NonNull final String translatedText) {
+                commitTranslationOverSelection(translatedText);
+            }
+
+            @Override
+            public void onError(@NonNull final String message) {
+                showTranslateError(message);
+            }
+        });
+    }
+
+    /**
+     * Writes the translation over the selection it was made from. The selection is re-read first:
+     * the user may have tapped elsewhere while the request was in flight, and overwriting whatever
+     * they selected in the meantime would silently destroy unrelated text.
+     */
+    private void commitTranslationOverSelection(@NonNull final String translated) {
+        final String original = mPendingTranslateSource;
+        clearPendingTranslateState();
+        if (original == null) return;
+        final CharSequence selected;
+        try {
+            selected = mInputLogic.mConnection.getSelectedText(0);
+        } catch (Exception e) {
+            Toast.makeText(this, R.string.translate_error_selection_changed, Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (selected == null || !original.contentEquals(selected)) {
+            Toast.makeText(this, R.string.translate_error_selection_changed, Toast.LENGTH_LONG).show();
+            return;
+        }
+        mInputLogic.mConnection.commitText(translated, 1);
+    }
+
+    private void showTranslateError(@NonNull final String message) {
+        cancelPendingTranslateErrorOverlayHide();
+        mPendingTranslateSource = null;
+        mTranslateMenuOpen = false;
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+        if (mSuggestionStripView == null) return;
+        mSuggestionStripView.showTranslateError(message);
+        final SuggestionStripView strip = mSuggestionStripView;
+        final Runnable hideRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (mTranslateErrorOverlayHideRunnable != this) return;
+                mTranslateErrorOverlayHideRunnable = null;
+                if (mSuggestionStripView == strip) {
+                    mSuggestionStripView.hideTranslateOverlay();
+                }
+            }
+        };
+        mTranslateErrorOverlayHideRunnable = hideRunnable;
+        mTextFixOverlayHandler.postDelayed(hideRunnable, TEXT_FIX_ERROR_OVERLAY_HIDE_MS);
+    }
+
+    private void cancelPendingTranslateErrorOverlayHide() {
+        if (mTranslateErrorOverlayHideRunnable == null) return;
+        mTextFixOverlayHandler.removeCallbacks(mTranslateErrorOverlayHideRunnable);
+        mTranslateErrorOverlayHideRunnable = null;
+    }
+
+    private void clearPendingTranslateState() {
+        cancelPendingTranslateErrorOverlayHide();
+        mPendingTranslateSource = null;
+        mTranslateMenuOpen = false;
+        if (mTranslateManager != null) mTranslateManager.cancel();
+        if (mSuggestionStripView != null) mSuggestionStripView.hideTranslateOverlay();
+    }
+
+    // endregion
 
     private void commitTextFixReplacement() {
         cancelPendingTextFixErrorOverlayHide();
@@ -1012,8 +1189,9 @@ public class LatinIME extends InputMethodService implements
 
     @Override
     public void onDestroy() {
-        mVoiceInputManager.release();
+        if (mVoiceInputManager != null) mVoiceInputManager.release();
         if (mTextFixManager != null) mTextFixManager.release();
+        if (mTranslateManager != null) mTranslateManager.release();
         mClipboardHistoryManager.onDestroy();
         mDictionaryFacilitator.closeDictionaries();
         mInputLogic.onDestroy();
@@ -1102,6 +1280,49 @@ public class LatinIME extends InputMethodService implements
             mSuggestionStripView.setOnCancelRecording(() -> {
                 if (mVoiceInputManager != null) mVoiceInputManager.cancelRecording();
             });
+            reconcileOverlaysWithManagers();
+        }
+    }
+
+    /**
+     * A recreated input view (theme reload, configuration change) starts with a fresh strip that
+     * has none of the overlays or callbacks the managers' earlier callbacks registered. If voice
+     * input is live or a Text Fix proposal is pending, re-apply the matching overlay here so the
+     * user keeps an indicator and a Cancel button instead of a silently running recording.
+     */
+    private void reconcileOverlaysWithManagers() {
+        if (mSuggestionStripView == null) return;
+        if (mVoiceInputManager != null) {
+            final VoiceInputManager.State voiceState = mVoiceInputManager.getState();
+            if (voiceState != VoiceInputManager.State.IDLE) {
+                mSuggestionStripView.setVoiceTelemetryProvider(() -> new kotlin.Pair<>(
+                        mVoiceInputManager.getCurrentAmplitude(),
+                        mVoiceInputManager.getCurrentDurationMs()));
+                if (voiceState == VoiceInputManager.State.TRANSCRIBING) {
+                    mSuggestionStripView.showTranscribingOverlay();
+                } else {
+                    mSuggestionStripView.showRecordingOverlay();
+                }
+            }
+        }
+        if (mTextFixManager != null) {
+            if (mPendingTextFixProposed != null) {
+                mSuggestionStripView.setOnReplaceTextFix(this::commitTextFixReplacement);
+                mSuggestionStripView.setOnDiscardTextFix(this::discardTextFix);
+                mSuggestionStripView.showTextFixResult(mPendingTextFixProposed);
+            } else if (mTextFixManager.getState() == TextFixManager.State.WORKING) {
+                mSuggestionStripView.setOnReplaceTextFix(this::commitTextFixReplacement);
+                mSuggestionStripView.setOnDiscardTextFix(this::discardTextFix);
+                mSuggestionStripView.showTextFixWorking();
+            }
+        }
+        if (mTranslateManager != null) {
+            if (mTranslateManager.getState() == TranslateManager.State.WORKING) {
+                mSuggestionStripView.setOnCancelTranslate(this::clearPendingTranslateState);
+                mSuggestionStripView.showTranslateWorking();
+            } else if (mTranslateMenuOpen) {
+                showTranslateLanguageMenu();
+            }
         }
     }
 
@@ -1372,6 +1593,7 @@ public class LatinIME extends InputMethodService implements
         Log.i(TAG, "onWindowHidden");
         cancelVoiceRecordingIfCapturing();
         clearPendingTextFixState();
+        clearPendingTranslateState();
         final MainKeyboardView mainKeyboardView = mKeyboardSwitcher.getMainKeyboardView();
         if (mainKeyboardView != null) {
             mainKeyboardView.closing();
@@ -1389,6 +1611,7 @@ public class LatinIME extends InputMethodService implements
         // risks uploading audio for an editor that no longer exists.
         cancelVoiceRecordingIfCapturing();
         clearPendingTextFixState();
+        clearPendingTranslateState();
         mDictionaryFacilitator.onFinishInput();
         final MainKeyboardView mainKeyboardView = mKeyboardSwitcher.getMainKeyboardView();
         if (mainKeyboardView != null) {
@@ -1790,6 +2013,7 @@ public class LatinIME extends InputMethodService implements
                     // exclusive rather than letting the second one stomp the first one's overlay.
                     case IDLE -> {
                         clearPendingTextFixState();
+                        clearPendingTranslateState();
                         mVoiceInputManager.startRecording(KeyCode.VOICE_STT_INPUT == event.getKeyCode());
                     }
                 }
@@ -1803,12 +2027,17 @@ public class LatinIME extends InputMethodService implements
                 // matters even when starting fresh: a previous proposal left in place would still be
                 // committed by Replace if this new request failed.
                 clearPendingTextFixState();
+                clearPendingTranslateState();
                 if (!wasWorking) {
                     cancelVoiceRecordingIfCapturing();
                     mTextFixManager.startTextFix(KeyCode.TEXT_FIX_2 == event.getKeyCode()
                             ? TextFixManager.Variant.SECONDARY : TextFixManager.Variant.PRIMARY);
                 }
             }
+            return;
+        }
+        if (KeyCode.TRANSLATE == event.getKeyCode()) {
+            onTranslateKeyPressed();
             return;
         }
         final InputTransaction completeInputTransaction =

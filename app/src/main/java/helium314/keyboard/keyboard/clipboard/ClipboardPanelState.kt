@@ -112,6 +112,12 @@ class ClipboardPanelState {
     var menuFor by mutableStateOf<Long?>(null)
     /** ids of clips shown with their full text */
     val expanded = mutableStateListOf<Long>()
+    /** target languages offered by the Translate action; empty hides the action entirely */
+    var translateLanguages by mutableStateOf<List<String>>(emptyList())
+    /** true while the action sheet shows the language chips instead of the action row */
+    var pickingLanguage by mutableStateOf(false)
+    /** true while a translation started from the action sheet is in flight */
+    var translating by mutableStateOf(false)
 
     fun setClips(entries: List<ClipboardHistoryEntry>) {
         val items = entries.map { ClipItem(it) }
@@ -120,6 +126,8 @@ class ClipboardPanelState {
         val ids = items.mapTo(HashSet()) { it.id }
         expanded.retainAll { it in ids }
         menuFor = menuFor?.takeIf { it in ids }
+        // The language chips belong to the sheet; if its clip is gone, so is the sub-menu.
+        if (menuFor == null) pickingLanguage = false
     }
 
     fun clip(id: Long?) = clips.firstOrNull { it.id == id }
@@ -150,6 +158,9 @@ interface ClipboardPanelActions {
     fun onDelete(id: Long)
     fun onCopy(item: ClipItem)
     fun onShare(item: ClipItem)
+    /** Translate [item] into [language] and paste the result into the app's text field. */
+    fun onTranslate(item: ClipItem, language: String)
+    fun onCancelTranslate()
     fun onStartEdit(item: ClipItem)
     fun onStartSearch()
     fun onFinishTyping(commit: Boolean)

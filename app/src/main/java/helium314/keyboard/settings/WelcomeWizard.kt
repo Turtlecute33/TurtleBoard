@@ -48,6 +48,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -78,11 +79,18 @@ import helium314.keyboard.latin.voice.AiProvider
 import helium314.keyboard.latin.voice.SecretStore
 import helium314.keyboard.latin.voice.apiKeyPrefKey
 import helium314.keyboard.latin.voice.defaultApiKey
+import helium314.keyboard.latin.voice.defaultSttModel
 import helium314.keyboard.latin.voice.parseExpectedLanguages
+import helium314.keyboard.latin.voice.supportsSttSlug
+import helium314.keyboard.latin.voice.supportsTextFixSlug
+import helium314.keyboard.latin.voice.supportsVoiceSlug
 import helium314.keyboard.settings.dialogs.ConfirmationDialog
 import helium314.keyboard.settings.dialogs.ListPickerDialog
 import helium314.keyboard.settings.dialogs.TextInputDialog
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun WelcomeWizard(
@@ -284,8 +292,6 @@ fun WelcomeWizard(
         primaryAction: () -> Unit,
         secondaryText: String? = null,
         secondaryAction: (() -> Unit)? = null,
-        tertiaryText: String? = null,
-        tertiaryAction: (() -> Unit)? = null,
     ) {
         Surface(
             shape = RoundedCornerShape(28.dp),
@@ -315,16 +321,6 @@ fun WelcomeWizard(
                 if (secondaryText != null && secondaryAction != null) {
                     Spacer(Modifier.height(10.dp))
                     SecondaryAction(secondaryText, null, secondaryAction)
-                }
-                if (tertiaryText != null && tertiaryAction != null) {
-                    Spacer(Modifier.height(4.dp))
-                    TextButton(
-                        onClick = tertiaryAction,
-                        colors = ButtonDefaults.textButtonColors(contentColor = textColorDim),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(tertiaryText)
-                    }
                 }
             }
         }
@@ -508,17 +504,30 @@ private fun AiProviderSetupStep(
     }
     fun selectProvider(provider: AiProvider) {
         providerPref = provider.prefValue
+        // Only reset model selections the new provider cannot serve — same policy as VoiceScreen.
+        // Unconditionally resetting here would wipe a deliberate model choice just because the
+        // user re-ran setup (or re-picked the same provider).
+        val currentVoice = prefs.getString(Settings.PREF_VOICE_MODEL, Defaults.PREF_VOICE_MODEL)
+            ?: Defaults.PREF_VOICE_MODEL
+        val currentStt = prefs.getString(Settings.PREF_VOICE_STT_MODEL, Defaults.PREF_VOICE_STT_MODEL)
+            ?: Defaults.PREF_VOICE_STT_MODEL
+        val currentTextFix = prefs.getString(Settings.PREF_TEXT_FIX_MODEL, Defaults.PREF_TEXT_FIX_MODEL)
+            ?: Defaults.PREF_TEXT_FIX_MODEL
+        val currentPolish = prefs.getString(Settings.PREF_VOICE_POLISH_MODEL, Defaults.PREF_VOICE_POLISH_MODEL)
+            ?: Defaults.PREF_VOICE_POLISH_MODEL
         prefs.edit {
             putString(Settings.PREF_AI_PROVIDER, provider.prefValue)
-            when (provider) {
-                AiProvider.OPENROUTER -> {
-                    putString(Settings.PREF_VOICE_MODEL, Defaults.PREF_VOICE_MODEL)
-                    putString(Settings.PREF_TEXT_FIX_MODEL, Defaults.PREF_TEXT_FIX_MODEL)
-                }
-                AiProvider.PAYPERQ -> {
-                    putString(Settings.PREF_VOICE_MODEL, Defaults.PREF_VOICE_MODEL)
-                    putString(Settings.PREF_TEXT_FIX_MODEL, Defaults.PREF_TEXT_FIX_MODEL)
-                }
+            if (!provider.supportsVoiceSlug(currentVoice)) {
+                putString(Settings.PREF_VOICE_MODEL, Defaults.PREF_VOICE_MODEL)
+            }
+            if (!provider.supportsSttSlug(currentStt)) {
+                putString(Settings.PREF_VOICE_STT_MODEL, provider.defaultSttModel())
+            }
+            if (!provider.supportsTextFixSlug(currentTextFix)) {
+                putString(Settings.PREF_TEXT_FIX_MODEL, Defaults.PREF_TEXT_FIX_MODEL)
+            }
+            if (!provider.supportsTextFixSlug(currentPolish)) {
+                putString(Settings.PREF_VOICE_POLISH_MODEL, Defaults.PREF_VOICE_POLISH_MODEL)
             }
         }
         refreshApiKeyState(provider)
@@ -537,16 +546,34 @@ private fun AiProviderSetupStep(
     }
 
     if (showApiKeyDialog) {
+        val scope = rememberCoroutineScope()
         TextInputDialog(
             onDismissRequest = { showApiKeyDialog = false },
             onConfirmed = {
                 val key = it.trim()
-                SecretStore.setApiKey(ctx, selectedProvider.apiKeyPrefKey(), key)
+                // Optimistic state; the encrypted-prefs write is a disk commit plus a KeyStore
+                // round trip and must not run on the UI thread (see VoiceScreen.saveApiKey).
                 apiKeySet = key.isNotBlank()
+                scope.launch {
+                    val failed = withContext(Dispatchers.IO) {
+                        runCatching { SecretStore.setApiKey(ctx, selectedProvider.apiKeyPrefKey(), key) }.isFailure
+                    }
+                    if (failed) {
+                        val stillSet = withContext(Dispatchers.IO) {
+                            SecretStore.getApiKey(ctx, selectedProvider.apiKeyPrefKey(), selectedProvider.defaultApiKey()).isNotBlank()
+                        }
+                        Toast.makeText(ctx, R.string.voice_error_secure_storage_unavailable, Toast.LENGTH_SHORT).show()
+                        apiKeySet = stillSet
+                    }
+                }
                 showApiKeyDialog = false
                 if (key.isNotBlank()) onApiKeyConfigured()
             },
-            initialText = SecretStore.getApiKey(ctx, selectedProvider.apiKeyPrefKey(), selectedProvider.defaultApiKey()),
+            // Deliberately not prefilled with the stored key (see VoiceScreen): loading the secret
+            // into an editable field exposes it to anyone who can open the setup flow on a
+            // configured device. Confirm stays disabled while the field is empty, so an
+            // untouched dialog can't wipe a working key.
+            initialText = "",
             title = {
                 Text(
                     if (selectedProvider == AiProvider.PAYPERQ) {

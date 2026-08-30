@@ -244,6 +244,7 @@ sealed interface KeyData : AbstractKeyData {
             "stt_action_key" to "!icon/stt_action_key|!code/key_voice_stt_input",
             "text_fix_key" to "!icon/text_fix_key|!code/key_text_fix",
             "text_fix_2_key" to "!icon/text_fix_2_key|!code/key_text_fix_2",
+            "translate_key" to "!icon/translate_key|!code/key_translate",
         )
 
         private fun applyActionPopupOrder(popupKeys: MutableList<String>) {
@@ -278,6 +279,12 @@ sealed interface KeyData : AbstractKeyData {
                 && "!icon/text_fix_key|!code/key_text_fix" in present) {
                 val tf2 = "!icon/text_fix_2_key|!code/key_text_fix_2"
                 if (tf2 !in present) present.add(tf2)
+            }
+            // Translate is opt-in and, like the second text-fix entry, is never part of the base
+            // popup definitions — it only joins the row once the user turns the feature on.
+            if (Settings.getInstance().current.mTranslateEnabled) {
+                val translate = "!icon/translate_key|!code/key_translate"
+                if (translate !in present) present.add(translate)
             }
             val stt = "!icon/stt_action_key|!code/key_voice_stt_input"
             if (onDeviceEngine) {

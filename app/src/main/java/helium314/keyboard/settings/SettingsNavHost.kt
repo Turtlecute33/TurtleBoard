@@ -35,6 +35,7 @@ import helium314.keyboard.settings.screens.SubtypeScreen
 import helium314.keyboard.settings.screens.TextCorrectionScreen
 import helium314.keyboard.settings.screens.ToolbarScreen
 import helium314.keyboard.settings.screens.TextFixScreen
+import helium314.keyboard.settings.screens.TranslateScreen
 import helium314.keyboard.settings.screens.VoiceScreen
 import helium314.keyboard.settings.screens.gesturedata.GestureDataScreen
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -73,6 +74,7 @@ fun SettingsNavHost(
                 onClickToolbar = { navController.navigate(SettingsDestination.Toolbar) },
                 onClickVoice = { navController.navigate(SettingsDestination.Voice) },
                 onClickTextFix = { navController.navigate(SettingsDestination.TextFix) },
+                onClickTranslate = { navController.navigate(SettingsDestination.Translate) },
                 onClickGestureTyping = { navController.navigate(SettingsDestination.GestureTyping) },
                 onClickDataGathering = { navController.navigate(SettingsDestination.DataGathering) },
                 onClickAdvanced = { navController.navigate(SettingsDestination.Advanced) },
@@ -100,6 +102,9 @@ fun SettingsNavHost(
         }
         composable(SettingsDestination.TextFix) {
             TextFixScreen(onClickBack = ::goBack)
+        }
+        composable(SettingsDestination.Translate) {
+            TranslateScreen(onClickBack = ::goBack)
         }
         composable(SettingsDestination.GestureTyping) {
             GestureTypingScreen(onClickBack = ::goBack)
@@ -182,6 +187,7 @@ object SettingsDestination {
     const val Toolbar = "toolbar"
     const val Voice = "voice"
     const val TextFix = "text_fix"
+    const val Translate = "translate"
     const val GestureTyping = "gesture_typing"
     const val DataGathering = "data_gathering" // remove when data gathering phase is done (end of 2026 latest)
     const val DataReview = "data_review" // remove when data gathering phase is done (end of 2026 latest)

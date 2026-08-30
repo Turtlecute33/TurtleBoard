@@ -30,7 +30,9 @@ internal fun sanitizeModelOutput(raw: String, maxLength: Int): String {
     // sequence, or a base+combining-mark cluster - any of which would render as broken glyphs.
     // BreakIterator handles surrogate/combining boundaries, but Java/Android implementations can
     // still stop between emoji that are joined by U+200D, so we repair that boundary explicitly.
-    val breaker = BreakIterator.getCharacterInstance()
+    // Locale.ROOT so grapheme boundaries (and thus truncation points) do not depend on the
+    // device locale.
+    val breaker = BreakIterator.getCharacterInstance(Locale.ROOT)
     breaker.setText(cleaned)
     val boundary = breaker.preceding(maxLength + 1)
     val end = avoidPartialZwjSequence(cleaned, if (boundary == BreakIterator.DONE) 0 else boundary)

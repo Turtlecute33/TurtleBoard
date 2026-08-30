@@ -1810,8 +1810,11 @@ public final class InputLogic {
             return;
         }
 
-        mInFlightSuggestionStripUpdates.incrementAndGet();
         mInputLogicHandler.getSuggestedWords(() -> {
+            // Increment inside the runnable: InputLogicHandler.reset() may drop queued runnables,
+            // and a dropped runnable must not leave the counter permanently above zero (which
+            // would force the blocking sync suggestion path for the rest of the process).
+            mInFlightSuggestionStripUpdates.incrementAndGet();
             try {
                 getSuggestedWords(inputStyle, SuggestedWords.NOT_A_SEQUENCE_NUMBER,
                         suggestedWords -> {

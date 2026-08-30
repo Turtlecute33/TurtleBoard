@@ -121,11 +121,9 @@ private fun ModelPickerDialog(
                         ) {
                             RadioButton(
                                 selected = selected?.slug == item.slug,
-                                onClick = {
-                                    onDismissRequest()
-                                    onItemSelected(item)
-                                    selected = item
-                                },
+                                // The whole row is already clickable with the same action; a
+                                // second handler here only duplicates the ripple on the button.
+                                onClick = null,
                             )
                             Column(
                                 verticalArrangement = Arrangement.spacedBy(4.dp),

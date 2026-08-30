@@ -235,6 +235,8 @@ class VoiceInputManager(
         }
 
         if (!audioRecorder.start()) {
+            currentAudioFile?.takeIf { it.exists() }?.delete()
+            currentAudioFile = null
             Toast.makeText(context, R.string.voice_error_transcription_failed, Toast.LENGTH_SHORT).show()
             return
         }

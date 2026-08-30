@@ -15,6 +15,7 @@ import helium314.keyboard.settings.screens.createLayoutSettings
 import helium314.keyboard.settings.screens.createPreferencesSettings
 import helium314.keyboard.settings.screens.createToolbarSettings
 import helium314.keyboard.settings.screens.createTextFixSettings
+import helium314.keyboard.settings.screens.createTranslateSettings
 import helium314.keyboard.settings.screens.createVoiceSettings
 
 class SettingsContainer(context: Context) {
@@ -117,7 +118,7 @@ private fun String.hasWordStartingWith(term: String): Boolean {
 // intentionally not putting individual debug settings in here so user knows the context
 private fun createSettings(context: Context) = createAboutSettings(context) + createAppearanceSettings(context) +
         createCorrectionSettings(context) + createPreferencesSettings(context) + createToolbarSettings(context) +
-        createVoiceSettings(context) + createTextFixSettings(context) +
+        createVoiceSettings(context) + createTextFixSettings(context) + createTranslateSettings(context) +
         createLayoutSettings(context) + createAdvancedSettings(context) +
         if (JniUtils.sHaveGestureLib) createGestureTypingSettings(context) else emptyList()
 

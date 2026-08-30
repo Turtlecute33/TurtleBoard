@@ -384,7 +384,8 @@ public final class KeyboardSwitcher implements KeyboardState.SwitchActions {
         mClipboardStripScrollView.setVisibility(View.GONE);
         mEmojiPalettesView.setVisibility(View.GONE);
         mClipboardHistoryView.startClipboardHistory(mLatinIME.getClipboardHistoryManager(), mKeyboardView.getKeyVisualAttribute(),
-                mLatinIME.getCurrentInputEditorInfo(), mLatinIME.mKeyboardActionListener);
+                mLatinIME.getCurrentInputEditorInfo(), mLatinIME.mKeyboardActionListener,
+                mLatinIME.getTranslateManager());
         mClipboardHistoryView.setVisibility(View.VISIBLE);
     }
 

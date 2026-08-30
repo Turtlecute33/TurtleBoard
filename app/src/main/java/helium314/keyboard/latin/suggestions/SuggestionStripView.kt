@@ -62,6 +62,7 @@ import helium314.keyboard.latin.utils.removePinnedKey
 import helium314.keyboard.latin.utils.setToolbarButtonsActivatedStateOnPrefChange
 import helium314.keyboard.latin.voice.RecordingOverlayView
 import helium314.keyboard.latin.voice.TextFixOverlayView
+import helium314.keyboard.latin.voice.TranslateOverlayView
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 import kotlin.math.min
@@ -265,7 +266,11 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         )
         isExternalSuggestionVisible = false
         updateKeys()
-        animateSuggestionsIn()
+        // Typing refreshes the strip on every keystroke; fading each of those refreshes
+        // allocates an animator plus a hardware layer in the most latency-sensitive path in
+        // the app, and mostly animates flicker since every word changes anyway. Fade only
+        // non-typing updates (predictions after commit, recorrection, batch results).
+        if (suggestions.mInputStyle != SuggestedWords.INPUT_STYLE_TYPING) animateSuggestionsIn()
     }
 
     // Gentle, fast fade so refreshed suggestions ease in instead of hard-swapping on every keystroke.
@@ -325,18 +330,28 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     }
 
     fun showRecordingOverlay() {
+        val overlay = ensureRecordingOverlay()
+        overlay.showRecording()
+        setExternalSuggestionView(overlay, false)
+    }
+
+    fun showTranscribingOverlay() {
+        // The overlay may be absent if the strip was recreated while the upload was in flight
+        // (theme reload, configuration change) — create it so the transcribing state still shows.
+        val overlay = ensureRecordingOverlay()
+        overlay.showTranscribing()
+        setExternalSuggestionView(overlay, false)
+    }
+
+    private fun ensureRecordingOverlay(): RecordingOverlayView {
+        recordingOverlay?.let { return it }
         val overlay = RecordingOverlayView(context)
         overlay.setColors(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
         overlay.onStopClick = { onStopRecording?.run() }
         overlay.onCancelClick = { onCancelRecording?.run() }
         overlay.telemetryProvider = voiceTelemetryProvider
-        overlay.showRecording()
-        setExternalSuggestionView(overlay, false)
         recordingOverlay = overlay
-    }
-
-    fun showTranscribingOverlay() {
-        recordingOverlay?.showTranscribing()
+        return overlay
     }
 
     fun hideRecordingOverlay() {
@@ -361,28 +376,83 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     }
 
     fun showTextFixWorking() {
-        val overlay = textFixOverlay ?: TextFixOverlayView(context).also {
+        ensureTextFixOverlay().showWorking()
+    }
+
+    fun showTextFixResult(proposed: String) {
+        // The overlay may be absent if the strip was recreated with a proposal still pending
+        // (theme reload, configuration change) — create it so the proposal is still shown.
+        ensureTextFixOverlay().showResult(proposed)
+    }
+
+    fun showTextFixError(message: String) {
+        ensureTextFixOverlay().showError(message)
+    }
+
+    private fun ensureTextFixOverlay(): TextFixOverlayView {
+        textFixOverlay?.let { return it }
+        val overlay = TextFixOverlayView(context).also {
             it.setColors(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
             it.onReplaceClick = { onReplaceTextFix?.run() }
             it.onDiscardClick = { onDiscardTextFix?.run() }
         }
-        overlay.showWorking()
-        if (textFixOverlay == null) {
-            setExternalSuggestionView(overlay, false)
-            textFixOverlay = overlay
-        }
-    }
-
-    fun showTextFixResult(proposed: String) {
-        textFixOverlay?.showResult(proposed)
-    }
-
-    fun showTextFixError(message: String) {
-        textFixOverlay?.showError(message)
+        setExternalSuggestionView(overlay, false)
+        textFixOverlay = overlay
+        return overlay
     }
 
     fun hideTextFixOverlay() {
         textFixOverlay = null
+        clear()
+        isExternalSuggestionVisible = false
+    }
+
+    // --- Translate overlay ---
+
+    private var translateOverlay: TranslateOverlayView? = null
+    private var onPickTranslateLanguage: ((String) -> Unit)? = null
+    private var onCancelTranslate: Runnable? = null
+
+    fun setOnPickTranslateLanguage(callback: ((String) -> Unit)?) {
+        onPickTranslateLanguage = callback
+    }
+
+    fun setOnCancelTranslate(callback: Runnable?) {
+        onCancelTranslate = callback
+    }
+
+    fun showTranslateLanguages(languages: List<String>) {
+        ensureTranslateOverlay().showLanguages(languages)
+    }
+
+    fun showTranslateWorking() {
+        ensureTranslateOverlay().showWorking()
+    }
+
+    fun showTranslateError(message: String) {
+        ensureTranslateOverlay().showError(message)
+    }
+
+    private fun ensureTranslateOverlay(): TranslateOverlayView {
+        translateOverlay?.let {
+            // The strip is cleared by any suggestion update, which detaches the overlay while the
+            // request is still running. Re-attach instead of leaving an invisible overlay behind.
+            if (it.parent == null) setExternalSuggestionView(it, false)
+            return it
+        }
+        val overlay = TranslateOverlayView(context).also {
+            it.setColors(Settings.getValues().mColors.get(ColorType.KEY_TEXT))
+            it.onLanguageClick = { language -> onPickTranslateLanguage?.invoke(language) }
+            it.onCancelClick = { onCancelTranslate?.run() }
+        }
+        setExternalSuggestionView(overlay, false)
+        translateOverlay = overlay
+        return overlay
+    }
+
+    fun hideTranslateOverlay() {
+        if (translateOverlay == null) return
+        translateOverlay = null
         clear()
         isExternalSuggestionVisible = false
     }

@@ -244,6 +244,7 @@ class OnDeviceRecognizer(private val context: Context) {
         override fun onBeginningOfSpeech() = Unit
 
         override fun onRmsChanged(rmsdB: Float) {
+            if (!sessionActive) return // keep the no-callbacks-after-teardown invariant uniform
             currentAmplitude = amplitudeFromRms(rmsdB)
         }
 

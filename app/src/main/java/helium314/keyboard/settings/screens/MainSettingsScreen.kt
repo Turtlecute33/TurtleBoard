@@ -51,6 +51,7 @@ fun MainSettingsScreen(
     onClickToolbar: () -> Unit,
     onClickVoice: () -> Unit,
     onClickTextFix: () -> Unit,
+    onClickTranslate: () -> Unit,
     onClickGestureTyping: () -> Unit,
     onClickDataGathering: () -> Unit,
     onClickAdvanced: () -> Unit,
@@ -78,6 +79,7 @@ fun MainSettingsScreen(
             add(MainEntry(R.string.settings_screen_toolbar, R.drawable.ic_settings_toolbar, onClickToolbar))
             add(MainEntry(R.string.settings_screen_voice, R.drawable.sym_keyboard_voice_rounded, onClickVoice))
             add(MainEntry(R.string.settings_screen_text_fix, R.drawable.ic_text_fix, onClickTextFix))
+            add(MainEntry(R.string.settings_screen_translate, R.drawable.ic_translate, onClickTranslate))
             if (JniUtils.sHaveGestureLib)
                 add(MainEntry(R.string.settings_screen_gesture, R.drawable.ic_settings_gesture, onClickGestureTyping))
             // we don't even show the menu if data gathering phase ended more than 2 weeks ago
@@ -122,7 +124,7 @@ private fun PreviewScreen() {
     initPreview(LocalContext.current)
     Theme(previewDark) {
         Surface {
-            MainSettingsScreen({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
+            MainSettingsScreen({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
         }
     }
 }
