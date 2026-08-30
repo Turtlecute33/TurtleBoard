@@ -1366,7 +1366,7 @@ New dictionary:
     <string name="text_fix_2_prompt_summary">Instruction sent for the second text fix variation</string>
     <string name="settings_screen_translate">Translate</string>
     <string name="translate_enabled">Enable Translate</string>
-    <string name="translate_enabled_summary">After adding a provider API key, enable this. Select text and long-press Return, then pick a language.</string>
+    <string name="translate_enabled_summary">After adding a provider API key, enable this. Select text, or copy some, then long-press Return and pick a language.</string>
     <string name="translate_enable_privacy_title">Enable Translate?</string>
     <string name="translate_enable_privacy_message">Translate sends the selected text over HTTPS to your selected AI provider using the API key you supply.</string>
     <string name="translate_enable_privacy_confirm">Enable Translate</string>
@@ -1382,10 +1382,10 @@ New dictionary:
     <string name="translate_working">Translating…</string>
     <string name="translate_cancel">Cancel</string>
     <string name="translate_error_not_enabled">Enable Translate in settings</string>
-    <string name="translate_error_no_selection">Select text first, then long-press Return to translate</string>
+    <string name="translate_error_no_selection">Select text, or copy some, then long-press Return to translate</string>
     <string name="translate_error_no_text">There is no text to translate</string>
     <string name="translate_error_no_language">Add a target language in settings</string>
-    <string name="translate_error_too_long">Selected text is too long</string>
+    <string name="translate_error_too_long">The text is too long to translate</string>
     <string name="translate_error_selection_changed">Selection changed; select the same text and try again</string>
     <string name="translate_error_sensitive_field">Translate is unavailable in sensitive fields</string>
     <string name="translate_error_unsupported_field">Translate is unavailable in this field</string>

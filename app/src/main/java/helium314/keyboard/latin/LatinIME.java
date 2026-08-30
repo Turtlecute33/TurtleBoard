@@ -151,8 +151,10 @@ public class LatinIME extends InputMethodService implements
     private String mPendingTextFixOriginal;
     private String mPendingTextFixProposed;
     private TranslateManager mTranslateManager;
-    /** Selected text captured when the Translate key was pressed, kept until the request settles. */
+    /** Text captured when the Translate key was pressed, kept until the request settles. */
     private String mPendingTranslateSource;
+    /** True when the pending source came from the clipboard, so the result is inserted, not replaced. */
+    private boolean mPendingTranslateFromClipboard;
     /** True while the language middle menu is on screen, so a recreated strip can restore it. */
     private boolean mTranslateMenuOpen;
     /**
@@ -885,6 +887,10 @@ public class LatinIME extends InputMethodService implements
     /**
      * Long-press Return → Translate. Opens the language middle menu, or closes it (cancelling an
      * in-flight request) when it is already up, so the key toggles like the voice key does.
+     *
+     * <p>The source is the selection when there is one, and the clipboard otherwise: with "ciao"
+     * selected the field becomes "hello", and with an empty field and "albero" on the clipboard
+     * the translation "tree" is written at the cursor.
      */
     private void onTranslateKeyPressed() {
         if (mTranslateManager == null) return;
@@ -897,14 +903,15 @@ public class LatinIME extends InputMethodService implements
             Toast.makeText(this, reason, Toast.LENGTH_LONG).show();
             return;
         }
-        final CharSequence selected;
+        CharSequence source;
         try {
-            selected = mInputLogic.mConnection.getSelectedText(0);
+            source = mInputLogic.mConnection.getSelectedText(0);
         } catch (Exception e) {
-            Toast.makeText(this, R.string.translate_error_no_selection, Toast.LENGTH_LONG).show();
-            return;
+            source = null;
         }
-        if (selected == null || selected.toString().trim().isEmpty()) {
+        final boolean fromClipboard = source == null || source.toString().trim().isEmpty();
+        if (fromClipboard) source = mClipboardHistoryManager.retrieveClipboardContentForAi();
+        if (source == null || source.toString().trim().isEmpty()) {
             Toast.makeText(this, R.string.translate_error_no_selection, Toast.LENGTH_LONG).show();
             return;
         }
@@ -914,7 +921,8 @@ public class LatinIME extends InputMethodService implements
         cancelVoiceRecordingIfCapturing();
         clearPendingTextFixState();
         clearPendingTranslateState();
-        mPendingTranslateSource = selected.toString();
+        mPendingTranslateSource = source.toString();
+        mPendingTranslateFromClipboard = fromClipboard;
         showTranslateLanguageMenu();
     }
 
@@ -922,14 +930,14 @@ public class LatinIME extends InputMethodService implements
         if (mSuggestionStripView == null || mTranslateManager == null) return;
         mTranslateMenuOpen = true;
         mSuggestionStripView.setOnPickTranslateLanguage(language -> {
-            startTranslateOverSelection(language);
+            startTranslate(language);
             return Unit.INSTANCE;
         });
         mSuggestionStripView.setOnCancelTranslate(this::clearPendingTranslateState);
         mSuggestionStripView.showTranslateLanguages(mTranslateManager.languages());
     }
 
-    private void startTranslateOverSelection(@NonNull final String language) {
+    private void startTranslate(@NonNull final String language) {
         if (mTranslateManager == null) return;
         if (mPendingTranslateSource == null) {
             clearPendingTranslateState();
@@ -953,7 +961,7 @@ public class LatinIME extends InputMethodService implements
 
             @Override
             public void onResult(@NonNull final String originalText, @NonNull final String translatedText) {
-                commitTranslationOverSelection(translatedText);
+                commitTranslation(translatedText);
             }
 
             @Override
@@ -964,14 +972,25 @@ public class LatinIME extends InputMethodService implements
     }
 
     /**
-     * Writes the translation over the selection it was made from. The selection is re-read first:
-     * the user may have tapped elsewhere while the request was in flight, and overwriting whatever
-     * they selected in the meantime would silently destroy unrelated text.
+     * Writes the translation into the field. A translation made from a selection replaces it, and
+     * the selection is re-read first: the user may have tapped elsewhere while the request was in
+     * flight, and overwriting whatever they selected in the meantime would silently destroy
+     * unrelated text. A translation made from the clipboard is inserted at the cursor, like a
+     * paste, and is refused if the user has selected something since.
      */
-    private void commitTranslationOverSelection(@NonNull final String translated) {
+    private void commitTranslation(@NonNull final String translated) {
         final String original = mPendingTranslateSource;
+        final boolean fromClipboard = mPendingTranslateFromClipboard;
         clearPendingTranslateState();
         if (original == null) return;
+        if (fromClipboard) {
+            if (mInputLogic.mConnection.hasSelection()) {
+                Toast.makeText(this, R.string.translate_error_selection_changed, Toast.LENGTH_LONG).show();
+                return;
+            }
+            onTextInput(translated);
+            return;
+        }
         final CharSequence selected;
         try {
             selected = mInputLogic.mConnection.getSelectedText(0);
@@ -989,6 +1008,7 @@ public class LatinIME extends InputMethodService implements
     private void showTranslateError(@NonNull final String message) {
         cancelPendingTranslateErrorOverlayHide();
         mPendingTranslateSource = null;
+        mPendingTranslateFromClipboard = false;
         mTranslateMenuOpen = false;
         Toast.makeText(this, message, Toast.LENGTH_LONG).show();
         if (mSuggestionStripView == null) return;
@@ -1017,6 +1037,7 @@ public class LatinIME extends InputMethodService implements
     private void clearPendingTranslateState() {
         cancelPendingTranslateErrorOverlayHide();
         mPendingTranslateSource = null;
+        mPendingTranslateFromClipboard = false;
         mTranslateMenuOpen = false;
         if (mTranslateManager != null) mTranslateManager.cancel();
         if (mSuggestionStripView != null) mSuggestionStripView.hideTranslateOverlay();

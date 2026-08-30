@@ -115,6 +115,18 @@ class ClipboardHistoryManager(
         return clipData.getItemAt(0)?.coerceToText(latinIME) ?: ""
     }
 
+    /**
+     * The clipboard text, or "" when the clip is not text or the app that wrote it marked it
+     * sensitive. Pasting such a clip is fine because it stays on the device, but an AI action
+     * picks the clipboard up implicitly and sends it to a provider, so it must skip these.
+     */
+    fun retrieveClipboardContentForAi(): CharSequence {
+        val clipData = clipboardManager.primaryClip ?: return ""
+        if (clipData.itemCount == 0 || clipData.description?.hasMimeType("text/*") == false) return ""
+        if (ClipboardManagerCompat.getClipSensitivity(clipData.description) == true) return ""
+        return clipData.getItemAt(0)?.coerceToText(latinIME) ?: ""
+    }
+
     private fun isClipSensitive(inputType: Int): Boolean {
         ClipboardManagerCompat.getClipSensitivity(clipboardManager.primaryClip?.description)?.let { return it }
         return InputTypeUtils.isPasswordInputType(inputType)
